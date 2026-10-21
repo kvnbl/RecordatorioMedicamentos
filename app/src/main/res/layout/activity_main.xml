@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F4F7FA"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_vertical"
+        android:padding="28dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Recordatorio de medicamentos"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="#16324F"
+            android:gravity="center" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="36dp"
+            android:text="Inicia sesión para gestionar tus recordatorios"
+            android:textSize="16sp"
+            android:textColor="#526171"
+            android:gravity="center" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:labelFor="@id/etCorreo"
+            android:text="Correo"
+            android:textSize="16sp"
+            android:textColor="#16324F" />
+
+        <EditText
+            android:id="@+id/etCorreo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="56dp"
+            android:hint="Ingresa tu correo electrónico"
+            android:inputType="textEmailAddress"
+            android:autofillHints="emailAddress"
+            android:imeOptions="actionNext"
+            android:maxLines="1"
+            android:textColor="#16324F"
+            android:textColorHint="#526171"
+            android:backgroundTint="#176B87" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:labelFor="@id/etContrasena"
+            android:text="Contraseña"
+            android:textSize="16sp"
+            android:textColor="#16324F" />
+
+        <EditText
+            android:id="@+id/etContrasena"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="56dp"
+            android:hint="Ingresa tu contraseña"
+            android:inputType="textPassword"
+            android:autofillHints="password"
+            android:imeOptions="actionDone"
+            android:maxLines="1"
+            android:textColor="#16324F"
+            android:textColorHint="#526171"
+            android:backgroundTint="#176B87" />
+
+        <Button
+            android:id="@+id/btnIngresar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="56dp"
+            android:layout_marginTop="28dp"
+            android:text="Iniciar sesión"
+            android:textAllCaps="false"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#176B87" />
+
+        <Button
+            android:id="@+id/btnRegistrarse"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="56dp"
+            android:layout_marginTop="12dp"
+            android:text="Crear cuenta"
+            android:textAllCaps="false"
+            android:textSize="16sp"
+            android:textColor="#16324F"
+            android:backgroundTint="#DCE8EF" />
+
+    </LinearLayout>
+</ScrollView>

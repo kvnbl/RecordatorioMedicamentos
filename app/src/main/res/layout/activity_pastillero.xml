@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F4F7FA"
+    android:fillViewport="true">
+
+    <!-- Organiza los elementos uno debajo de otro. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- Título de la pantalla. -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Pastillero"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="#16324F" />
+
+        <!-- Aquí mostraremos el estado de recepción de los datos. -->
+        <TextView
+            android:id="@+id/tvEstadoPastillero"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Esperando programación…"
+            android:textSize="16sp"
+            android:textColor="#526171"
+            android:accessibilityLiveRegion="polite" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:text="Programación recibida"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#16324F" />
+
+        <!-- Aquí aparecerán los recordatorios leídos desde Firebase. -->
+        <TextView
+            android:id="@+id/tvProgramacionPastillero"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="No hay recordatorios recibidos."
+            android:textSize="16sp"
+            android:textColor="#526171" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:text="Alarma"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#16324F" />
+
+        <!-- Cuando llegue la hora, mostraremos medicamento y dosis. -->
+        <TextView
+            android:id="@+id/tvAlarmaPastillero"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Sin alarma activa"
+            android:textSize="20sp"
+            android:textColor="#16324F"
+            android:accessibilityLiveRegion="polite" />
+
+        <!-- Se habilitará cuando exista una alarma para confirmar. -->
+        <Button
+            android:id="@+id/btnConfirmarToma"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="56dp"
+            android:layout_marginTop="20dp"
+            android:text="Confirmar toma"
+            android:textAllCaps="false"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#176B87"
+            android:enabled="false" />
+
+        <Button
+            android:id="@+id/btnVolverPastillero"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="56dp"
+            android:layout_marginTop="12dp"
+            android:text="Volver"
+            android:textAllCaps="false"
+            android:textSize="16sp"
+            android:textColor="#16324F"
+            android:backgroundTint="#DCE8EF" />
+
+    </LinearLayout>
+</ScrollView>

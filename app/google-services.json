@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "451577536664",
+    "project_id": "recordatoriodemedicament-90e4f",
+    "storage_bucket": "recordatoriodemedicament-90e4f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:451577536664:android:2f1818888076b3527ab0ed",
+        "android_client_info": {
+          "package_name": "com.example.recordatoriomedicamentos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBje40MWTQNJVNnhhvVV5ddd9_LkX9WK7o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
