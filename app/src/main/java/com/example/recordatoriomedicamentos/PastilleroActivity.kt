@@ -1,6 +1,14 @@
 package com.example.recordatoriomedicamentos
 
 import android.os.Bundle
+import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import android.widget.Button
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
@@ -20,6 +28,8 @@ import java.util.TimeZone
 import com.google.firebase.database.ServerValue
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.Date
+import java.text.ParseException
 
 class PastilleroActivity : AppCompatActivity() {
 
@@ -41,6 +51,10 @@ class PastilleroActivity : AppCompatActivity() {
     private var historialListo = false
     // Permite programar tareas en el hilo que actualiza la pantalla.
     private val manejador = Handler(Looper.getMainLooper())
+    private lateinit var conexionBluetooth: ConexionPastillero
+    private val permisoBluetooth = registerForActivityResult(ActivityResultContracts.RequestPermission()) { concedido ->
+        if (concedido) elegirDispositivoEmparejado() else textoEstado.text = "Permiso Bluetooth necesario para conectar el HC-05."
+    }
 
     // Esta tarea revisará los horarios y volverá a ejecutarse cada segundo.
     private val revisarCadaSegundo = object : Runnable {
@@ -75,6 +89,20 @@ class PastilleroActivity : AppCompatActivity() {
 
         textoEstado = findViewById(R.id.tvEstadoPastillero)
         textoProgramacion = findViewById(R.id.tvProgramacionPastillero)
+        conexionBluetooth = ConexionPastillero(
+            alCambiarEstado = { estado -> runOnUiThread {
+                textoEstado.text = estado
+                if (estado.startsWith("Conectado")) datosRecordatorios?.let(::sincronizarConArduino)
+            } },
+            alRecibirLinea = { linea -> runOnUiThread { procesarRespuestaArduino(linea) } }
+        )
+        findViewById<Button>(R.id.btnBluetoothPastillero).setOnClickListener {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+            ) {
+                permisoBluetooth.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            } else elegirDispositivoEmparejado()
+        }
         val usuario = FirebaseAuth.getInstance().currentUser
 
         if (usuario == null) {
@@ -121,6 +149,7 @@ class PastilleroActivity : AppCompatActivity() {
 
                 // Mostramos la lista de recordatorios.
                 mostrarProgramacion(datos)
+                if (conexionBluetooth.estaConectado()) sincronizarConArduino(datos)
 
                 // Revisamos inmediatamente si alguno corresponde a este minuto.
                 revisarHorarios()
@@ -134,6 +163,121 @@ class PastilleroActivity : AppCompatActivity() {
 
         escucha?.let { ubicacion.addValueEventListener(it) }
         manejador.post(revisarCadaSegundo)
+    }
+
+    @Suppress("MissingPermission")
+    private fun elegirDispositivoEmparejado() {
+        val adapter = BluetoothAdapter.getDefaultAdapter()
+        if (adapter == null) {
+            textoEstado.text = "Este teléfono no tiene Bluetooth."
+            return
+        }
+        if (!adapter.isEnabled) {
+            startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            textoEstado.text = "Activa Bluetooth y vuelve a conectar el HC-05."
+            return
+        }
+        val dispositivos = adapter.bondedDevices.toList()
+        if (dispositivos.isEmpty()) {
+            textoEstado.text = "Empareja primero el HC-05 desde los ajustes Bluetooth del teléfono."
+            startActivity(Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS))
+            return
+        }
+        val nombres = dispositivos.map { "${it.name ?: "Dispositivo Bluetooth"} (${it.address})" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Selecciona el HC-05 emparejado")
+            .setItems(nombres) { _, indice -> conexionBluetooth.conectar(dispositivos[indice]) }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun sincronizarConArduino(datos: DataSnapshot) {
+        val activos = datos.children.filter { it.child("activo").value as? Boolean == true }
+        if (activos.size > 2 || activos.any { ((it.child("compartimiento").value as? Number)?.toInt() ?: 0) !in 1..2 } ||
+            activos.mapNotNull { (it.child("compartimiento").value as? Number)?.toInt() }.distinct().size != activos.size
+        ) {
+            textoEstado.text = "No sincronizado: el pastillero admite un recordatorio activo por compartimiento (1 y 2)."
+            return
+        }
+        if (activos.any {
+                (it.child("zonaHoraria").value as? String) != TimeZone.getDefault().id
+            }
+        ) {
+            textoEstado.text = "No sincronizado: conecta el teléfono con la misma zona horaria usada al crear los recordatorios."
+            return
+        }
+        val ahora = java.text.SimpleDateFormat("yyyy-MM-dd;HH:mm:ss", Locale.US).format(Date())
+        val lineas = mutableListOf("SYNC_BEGIN;${activos.size}", "TIME;$ahora")
+        for (registro in activos) {
+            val id = registro.key ?: continue
+            val slot = (registro.child("compartimiento").value as? Number)?.toInt() ?: continue
+            val hora = registro.child("hora").value as? String ?: continue
+            val dias = registro.child("diasSemana").children.mapNotNull { (it.value as? Number)?.toInt() }
+            if (dias.any { it !in 1..7 } || !hora.matches(Regex("\\d{2}:\\d{2}"))) {
+                textoEstado.text = "No sincronizado: revisa días y hora del recordatorio."
+                return
+            }
+            val mascaraDias = dias.fold(0) { mascara, dia -> mascara or (1 shl (dia - 1)) }
+            lineas.add("SLOT;$slot;$mascaraDias;$hora;$id")
+        }
+        lineas.add("SYNC_END")
+        for (linea in lineas) {
+            if (!conexionBluetooth.enviar(linea)) {
+                textoEstado.text = "No se pudo enviar la programación al Arduino."
+                return
+            }
+        }
+        textoEstado.text = "Programación enviada; esperando confirmación del Arduino…"
+    }
+
+    private fun procesarRespuestaArduino(linea: String) {
+        when {
+            linea == "SYNC_OK" -> textoEstado.text = "HC-05 conectado; programación sincronizada."
+            linea.startsWith("ERR;") -> textoEstado.text = "Arduino rechazó la sincronización: ${linea.substringAfter(';')}"
+            linea.startsWith("TAKEN;") -> registrarTomaFisica(linea)
+            linea.startsWith("ALARM_ON") -> textoEstado.text = "El pastillero está avisando una toma."
+        }
+    }
+
+    private fun registrarTomaFisica(linea: String) {
+        val campos = linea.split(';')
+        if (campos.size != 4) return
+        val slot = campos[1].toIntOrNull() ?: return
+        val fecha = campos[2]
+        val hora = campos[3]
+        val datos = datosRecordatorios ?: return
+        val fechaHora = try {
+            SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).parse("$fecha $hora")
+        } catch (_: ParseException) { null } ?: return
+        val calendario = Calendar.getInstance().apply { time = fechaHora }
+        val dia = (calendario.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1
+        val registro = datos.children.firstOrNull {
+            (it.child("activo").value as? Boolean == true) &&
+                (it.child("compartimiento").value as? Number)?.toInt() == slot &&
+                it.child("hora").value as? String == hora &&
+                it.child("diasSemana").children.any { d -> (d.value as? Number)?.toInt() == dia }
+        } ?: return
+        val idRecordatorio = registro.key ?: return
+        val idToma = "${idRecordatorio}_${fecha}_${hora.replace(":", "") }"
+        val historial = referencia?.parent?.child("historial") ?: return
+        if (idToma in tomasConfirmadas) return
+        val toma = mapOf<String, Any>(
+            "idRecordatorio" to idRecordatorio,
+            "medicamento" to (registro.child("medicamento").value as? String ?: "Sin nombre"),
+            "dosis" to (registro.child("dosis").value as? String ?: ""),
+            "compartimiento" to slot,
+            "fechaProgramada" to fecha,
+            "horaProgramada" to hora,
+            "zonaHoraria" to (registro.child("zonaHoraria").value as? String ?: TimeZone.getDefault().id),
+            "estado" to "confirmada",
+            "confirmadoEn" to ServerValue.TIMESTAMP
+        )
+        historial.child(idToma).setValue(toma).addOnSuccessListener {
+            tomasConfirmadas.add(idToma)
+            tomasPendientes.remove(idToma)
+            textoEstado.text = "Toma del compartimiento $slot confirmada desde el pastillero."
+            mostrarSiguienteAviso()
+        }
     }
 
     private fun mostrarProgramacion(datos: DataSnapshot) {
@@ -386,6 +530,7 @@ class PastilleroActivity : AppCompatActivity() {
         // Dejamos de escuchar los cambios de Firebase.
         escucha?.let { referencia?.removeEventListener(it) }
         escucha = null
+        conexionBluetooth.desconectar()
 
         super.onStop()
     }
