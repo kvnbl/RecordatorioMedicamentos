@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_logout_dialog" android:orientation="vertical" android:padding="24dp">
+  <TextView android:id="@+id/confirmationTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/text_primary" android:textAppearance="@style/MedAlarmTextSectionTitle"/>
+  <TextView android:id="@+id/confirmationMessage" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textColor="@color/text_secondary" android:textAppearance="@style/MedAlarmTextBody"/>
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:orientation="horizontal">
+    <com.google.android.material.button.MaterialButton android:id="@+id/btnConfirmationCancel" style="@style/SecondaryOutlineButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="8dp" android:layout_weight="1" android:insetTop="0dp" android:insetBottom="0dp" android:minHeight="52dp" android:paddingTop="8dp" android:paddingBottom="8dp"/>
+    <com.google.android.material.button.MaterialButton android:id="@+id/btnConfirmationAccept" style="@style/PrimaryActionButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:insetTop="0dp" android:insetBottom="0dp" android:minHeight="52dp" android:paddingTop="8dp" android:paddingBottom="8dp"/>
+  </LinearLayout>
+</LinearLayout>

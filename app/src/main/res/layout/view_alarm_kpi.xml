@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:minHeight="88dp" android:orientation="vertical" android:padding="@dimen/ui_space_8">
+  <ImageView android:id="@+id/alarmKpiIcon" android:layout_width="24dp" android:layout_height="24dp" android:contentDescription="@null"/>
+  <TextView android:id="@+id/alarmKpiLabel" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ui_space_4" android:gravity="center" android:maxLines="1" android:ellipsize="end" android:textAppearance="@style/MedAlarmTextSecondaryStrong"/>
+  <TextView android:id="@+id/alarmKpiCount" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textAppearance="@style/MedAlarmTextDisplayMetric"/>
+</LinearLayout>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/main" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_dashboard_header_gradient">
+  <com.example.recordatoriomedicamentos.MedAlarmRoot android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/page_background" app:dashboardWaveOffset="58dp" app:dashboardWaveTopOffset="12dp">
+    <com.example.recordatoriomedicamentos.AdaptiveContentLayout android:layout_width="match_parent" android:layout_height="match_parent" android:layout_gravity="center_horizontal" android:orientation="vertical" android:paddingStart="@dimen/ui_page_padding" android:paddingTop="@dimen/dashboard_top_padding" android:paddingEnd="@dimen/ui_page_padding" android:paddingBottom="@dimen/ui_space_8">
+      <LinearLayout android:layout_width="match_parent" android:layout_height="48dp" android:gravity="center_vertical" android:orientation="horizontal">
+        <LinearLayout android:id="@+id/btnVolver" android:layout_width="wrap_content" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:clickable="true" android:contentDescription="@string/action_back" android:focusable="true" android:gravity="center_vertical" android:orientation="horizontal">
+          <ImageView android:layout_width="48dp" android:layout_height="48dp" android:contentDescription="@null" android:paddingTop="@dimen/ui_space_12" android:paddingEnd="@dimen/ui_space_24" android:paddingBottom="@dimen/ui_space_12" android:src="@drawable/ic_arrow_back" app:tint="@color/white"/>
+          <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/action_back" android:textColor="@color/white" android:textAppearance="@style/MedAlarmTextBody"/>
+        </LinearLayout>
+      </LinearLayout>
+      <LinearLayout android:layout_width="match_parent" android:layout_height="96dp" android:layout_marginTop="12dp" android:gravity="center_vertical" android:orientation="vertical">
+        <TextView android:id="@+id/tvSectionTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:textAppearance="@style/MedAlarmTextPageTitle"/>
+        <TextView android:id="@+id/tvAlarmSubtitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ui_space_4" android:text="@string/alarm_form_subtitle" android:textColor="@color/text_secondary" android:textAppearance="@style/MedAlarmTextSecondary"/>
+      </LinearLayout>
+      <!-- Deja un pequeño espacio entre la onda clara y el formulario desplazable. -->
+      <Space android:layout_width="match_parent" android:layout_height="@dimen/ui_space_16"/>
+      <ScrollView android:id="@+id/alarmScrollView" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:clipToPadding="false" android:fillViewport="true" android:fadingEdgeLength="@dimen/ui_space_16" android:overScrollMode="never" android:requiresFadingEdge="vertical">
+        <com.example.recordatoriomedicamentos.AdaptiveContentLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="top" android:orientation="vertical" android:padding="16dp" android:layout_gravity="center_horizontal">
+          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="24dp" android:orientation="vertical" android:paddingHorizontal="4dp">
+            <LinearLayout android:id="@+id/timePickerRow" android:layout_width="match_parent" android:layout_height="168dp" android:gravity="center" android:orientation="horizontal">
+              <NumberPicker android:id="@+id/pickerHour" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:contentDescription="@string/alarm_hour_picker_accessibility"/>
+              <TextView android:layout_width="20dp" android:layout_height="wrap_content" android:gravity="center" android:text=":" android:textColor="@color/text_primary" android:textAppearance="@style/MedAlarmTextTimeSeparator"/>
+              <NumberPicker android:id="@+id/pickerMinute" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1.15" android:contentDescription="@string/alarm_minute_picker_accessibility"/>
+              <NumberPicker android:id="@+id/pickerMeridiem" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1.3" android:contentDescription="@string/alarm_meridiem_picker_accessibility"/>
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:gravity="center_vertical" android:orientation="horizontal">
+              <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/alarm_repeat_label" android:textAppearance="@style/MedAlarmTextSectionTitle"/>
+              <TextView android:id="@+id/tvZonaHoraria" android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="end" android:maxLines="1" android:ellipsize="end" android:textColor="@color/text_secondary" android:textAppearance="@style/MedAlarmTextSecondary"/>
+            </LinearLayout>
+            <HorizontalScrollView android:id="@+id/weeklyDaysScroll" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:fillViewport="true" android:scrollbars="none">
+              <LinearLayout android:id="@+id/weekdaySelectorRow" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal"/>
+            </HorizontalScrollView>
+            <TextView android:id="@+id/tvRepetitionDetails" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:accessibilityLiveRegion="polite" android:textColor="@color/text_secondary" android:textAppearance="@style/MedAlarmTextSecondary"/>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:labelFor="@id/etMedicamento" android:text="@string/medicine_label" android:textAppearance="@style/MedAlarmTextBodyStrong"/>
+            <EditText android:id="@+id/etMedicamento" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:layout_marginTop="5dp" android:background="@drawable/bg_input" android:hint="@string/medicine_hint" android:inputType="textCapSentences" android:maxLength="80" android:maxLines="1" android:imeOptions="actionNext" android:paddingHorizontal="16dp" android:textAppearance="@style/MedAlarmTextBody" android:textColorHint="@color/text_secondary"/>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:labelFor="@id/etDosis" android:text="@string/dose_label" android:textAppearance="@style/MedAlarmTextBodyStrong"/>
+            <EditText android:id="@+id/etDosis" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:layout_marginTop="5dp" android:background="@drawable/bg_input" android:hint="@string/dose_hint" android:inputType="text" android:maxLength="80" android:maxLines="1" android:imeOptions="actionDone" android:paddingHorizontal="16dp" android:textAppearance="@style/MedAlarmTextBody" android:textColorHint="@color/text_secondary"/>
+            <Button android:id="@+id/btnGuardarRecordatorio" style="@style/PrimaryActionButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:layout_marginTop="18dp" android:text="@string/action_save_alarm"/>
+            <TextView android:id="@+id/tvEstadoGuardado" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:accessibilityLiveRegion="polite" android:textColor="@color/text_secondary" android:textAppearance="@style/MedAlarmTextSecondary"/>
+          </LinearLayout>
+        </com.example.recordatoriomedicamentos.AdaptiveContentLayout>
+      </ScrollView>
+    </com.example.recordatoriomedicamentos.AdaptiveContentLayout>
+  </com.example.recordatoriomedicamentos.MedAlarmRoot>
+</FrameLayout>

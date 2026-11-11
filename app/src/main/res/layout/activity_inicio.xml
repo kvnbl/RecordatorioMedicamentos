@@ -1,69 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/main"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#F4F7FA"
-    android:fillViewport="true">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center_vertical"
-        android:padding="28dp">
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Bienvenido"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:textColor="#16324F"
-            android:gravity="center" />
-
-        <TextView
-            android:id="@+id/tvCorreo"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:textSize="18sp"
-            android:textColor="#526171"
-            android:gravity="center" />
-        <Button
-            android:id="@+id/btnRecordatorios"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="56dp"
-            android:layout_marginTop="24dp"
-            android:text="Mis recordatorios"
-            android:textAllCaps="false"
-            android:textSize="16sp"
-            android:textColor="#FFFFFF"
-            android:backgroundTint="#176B87" />
-        <Button
-            android:id="@+id/btnPastillero"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="56dp"
-            android:layout_marginTop="12dp"
-            android:text="Modo pastillero"
-            android:textAllCaps="false"
-            android:textSize="16sp"
-            android:textColor="#FFFFFF"
-            android:backgroundTint="#176B87" />
-
-        <Button
-            android:id="@+id/btnCerrarSesion"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="56dp"
-            android:layout_marginTop="32dp"
-            android:text="Cerrar sesión"
-            android:textAllCaps="false"
-            android:textSize="16sp"
-            android:textColor="#FFFFFF"
-            android:backgroundTint="#176B87" />
-
-    </LinearLayout>
-</ScrollView>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/main" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_dashboard_header_gradient">
+  <ScrollView android:id="@+id/dashboardScrollView" android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:fillViewport="true" android:overScrollMode="never">
+    <com.example.recordatoriomedicamentos.MedAlarmRoot xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@color/page_background" app:dashboardWaveOffset="58dp" app:dashboardWaveTopOffset="12dp">
+      <com.example.recordatoriomedicamentos.AdaptiveContentLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="@dimen/dashboard_top_padding" android:paddingBottom="24dp" android:layout_gravity="center_horizontal">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="48dp" android:gravity="center_vertical" android:orientation="horizontal">
+          <ImageButton android:id="@+id/btnMenu" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="@string/nav_menu" android:paddingStart="0dp" android:paddingTop="@dimen/ui_space_12" android:paddingEnd="@dimen/ui_space_24" android:paddingBottom="@dimen/ui_space_12" android:src="@drawable/ic_menu" app:tint="@color/white"/>
+        </LinearLayout>
+        <LinearLayout android:id="@+id/dashboardHero" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="96dp" android:layout_marginTop="12dp">
+          <LinearLayout android:id="@+id/dashboardHeroTextPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="96dp" android:gravity="center_vertical" android:orientation="vertical">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+              <TextView android:id="@+id/tvGreeting" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/hero_greeting_default" android:textAppearance="@style/MedAlarmTextPageTitle"/>
+              <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ui_space_4" android:text="@string/hero_subtitle" android:textColor="@color/text_secondary" android:textAppearance="@style/MedAlarmTextSecondary"/>
+            </LinearLayout>
+          </LinearLayout>
+        </LinearLayout>
+        <GridLayout android:id="@+id/dashboardFeatureGrid" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:columnCount="2" android:useDefaultMargins="false">
+          <include layout="@layout/view_feature_tile" android:id="@+id/btnRecordatorios" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_columnWeight="1" android:layout_marginEnd="6dp" android:layout_marginBottom="6dp"/>
+          <include layout="@layout/view_feature_tile" android:id="@+id/btnHistorial" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_columnWeight="1" android:layout_marginStart="6dp" android:layout_marginBottom="6dp"/>
+          <include layout="@layout/view_feature_tile" android:id="@+id/btnInformes" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_columnWeight="1" android:layout_marginEnd="6dp" android:layout_marginTop="6dp"/>
+          <include layout="@layout/view_feature_tile" android:id="@+id/btnPastillero" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_columnWeight="1" android:layout_marginStart="6dp" android:layout_marginTop="6dp"/>
+        </GridLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp" android:background="@drawable/bg_next_alarm" android:orientation="vertical" android:padding="@dimen/ui_container_padding">
+          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+            <ImageView style="@style/FunctionalIcon" android:src="@drawable/ic_schedule" app:tint="@color/brand_primary"/>
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:layout_weight="1" android:text="@string/section_next_alarm" android:textColor="@color/text_primary" android:textAppearance="@style/MedAlarmTextSectionTitle" android:textStyle="bold"/>
+            <TextView android:id="@+id/tvAlarmDay" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/bg_chip" android:paddingHorizontal="@dimen/ui_chip_padding_horizontal" android:paddingVertical="@dimen/ui_chip_padding_vertical" android:textColor="@color/brand_primary" android:textAppearance="@style/MedAlarmTextSecondaryStrong" android:visibility="gone"/>
+          </LinearLayout>
+          <LinearLayout android:id="@+id/alarmContent" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:background="@drawable/bg_alarm_inner" android:orientation="vertical" android:padding="@dimen/ui_container_padding" android:visibility="gone">
+            <LinearLayout android:id="@+id/alarmMainRow" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+              <ImageView android:id="@+id/alarmPillIllustration" android:layout_width="@dimen/history_record_icon_size" android:layout_height="@dimen/history_record_icon_size" android:contentDescription="@null" android:scaleType="fitCenter" android:src="@drawable/history_pill"/>
+              <LinearLayout android:id="@+id/alarmDetails" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_weight="1" android:gravity="center_vertical" android:orientation="vertical">
+                <TextView android:id="@+id/tvAlarmMedicine" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end" android:maxLines="1" android:textColor="@color/text_primary" android:textAppearance="@style/MedAlarmHistoryRecordTitle"/>
+                <TextView android:id="@+id/tvAlarmDose" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:ellipsize="end" android:maxLines="1" android:textColor="@color/text_secondary" android:textAppearance="@style/MedAlarmTextSecondary"/>
+              </LinearLayout>
+              <View android:id="@+id/alarmDivider" android:layout_width="1dp" android:layout_height="@dimen/history_record_icon_size" android:layout_marginStart="12dp" android:layout_marginEnd="12dp" android:background="@color/divider_lavender"/>
+              <TextView android:id="@+id/tvAlarmTime" android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center" android:textColor="@color/brand_primary" android:textAppearance="@style/MedAlarmHistoryRecordTime"/>
+            </LinearLayout>
+          </LinearLayout>
+          <TextView android:id="@+id/tvAlarmState" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/alarm_loading" android:textColor="@color/text_secondary" android:textAppearance="@style/MedAlarmTextSecondary"/>
+        </LinearLayout>
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnNuevaAlarma" style="@style/PrimaryActionButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minHeight="52dp" android:layout_gravity="center_horizontal" android:layout_marginTop="20dp" android:text="@string/action_new_alarm" app:icon="@drawable/ic_add" app:iconGravity="textStart" app:iconTint="@color/white"/>
+      </com.example.recordatoriomedicamentos.AdaptiveContentLayout>
+    </com.example.recordatoriomedicamentos.MedAlarmRoot>
+  </ScrollView>
+  <FrameLayout android:id="@+id/dashboardSidebarOverlay" android:layout_width="match_parent" android:layout_height="match_parent" android:clickable="true" android:focusable="true" android:visibility="gone">
+    <View android:id="@+id/dashboardSidebarScrim" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#990D0925" android:clickable="true" android:contentDescription="@string/sidebar_close_description" android:focusable="true"/>
+    <com.example.recordatoriomedicamentos.MedAlarmRoot android:id="@+id/dashboardSidebarPanel" android:layout_width="280dp" android:layout_height="match_parent" android:layout_gravity="start" android:background="@drawable/bg_sidebar_panel_clip" android:clipToOutline="true" android:clickable="true" android:focusable="true" app:dashboardWaveOffset="8dp" app:dashboardWaveTopOffset="6dp" app:waveHeaderHeight="84dp">
+      <LinearLayout android:id="@+id/sidebarMainContent" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingBottom="16dp">
+        <Space android:layout_width="match_parent" android:layout_height="112dp"/>
+        <LinearLayout android:id="@+id/sidebarAccountRow" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="64dp" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="4dp" android:paddingEnd="4dp">
+          <FrameLayout android:layout_width="48dp" android:layout_height="48dp" android:background="@drawable/bg_avatar">
+            <ImageView android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="center" android:contentDescription="@null" android:src="@drawable/ic_person" app:tint="@color/white"/>
+          </FrameLayout>
+          <TextView android:id="@+id/sidebarAccountEmail" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_weight="1" android:breakStrategy="simple" android:hyphenationFrequency="none" android:textColor="@color/text_primary" android:textAppearance="@style/MedAlarmTextSecondaryStrong"/>
+        </LinearLayout>
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="12dp" android:layout_marginBottom="12dp" android:background="@color/divider_lavender"/>
+        <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:clipToPadding="false" android:fillViewport="false" android:overScrollMode="never">
+          <LinearLayout android:id="@+id/sidebarNavigationItems" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+            <include android:id="@+id/sidebarHome" layout="@layout/view_sidebar_item"/>
+            <include android:id="@+id/sidebarAlarms" layout="@layout/view_sidebar_item"/>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="8dp" android:layout_marginEnd="8dp" android:background="@color/divider_lavender"/>
+            <include android:id="@+id/sidebarHistory" layout="@layout/view_sidebar_item"/>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="8dp" android:layout_marginEnd="8dp" android:background="@color/divider_lavender"/>
+            <include android:id="@+id/sidebarReports" layout="@layout/view_sidebar_item"/>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="8dp" android:layout_marginEnd="8dp" android:background="@color/divider_lavender"/>
+            <include android:id="@+id/sidebarDevice" layout="@layout/view_sidebar_item"/>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="8dp" android:layout_marginEnd="8dp" android:background="@color/divider_lavender"/>
+          </LinearLayout>
+        </ScrollView>
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="12dp" android:layout_marginBottom="16dp" android:background="@color/divider_lavender"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/sidebarSignOut" style="@style/SidebarSignOutButton" android:layout_width="match_parent" android:layout_height="56dp" android:text="@string/menu_sign_out" app:icon="@drawable/ic_logout" app:iconGravity="textStart" app:iconTint="@color/brand_primary"/>
+      </LinearLayout>
+    </com.example.recordatoriomedicamentos.MedAlarmRoot>
+  </FrameLayout>
+</FrameLayout>

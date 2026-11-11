@@ -1,537 +1,510 @@
 package com.example.recordatoriomedicamentos
 
-import android.os.Bundle
 import android.Manifest
+import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
+import android.os.Bundle
+import android.os.SystemClock
+import android.provider.Settings
+import android.view.View
 import android.widget.Button
+import android.widget.GridLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.DatabaseReference
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
-import android.os.Handler
-import android.os.Looper
-import java.util.Calendar
-import java.util.TimeZone
-import com.google.firebase.database.ServerValue
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.Date
-import java.text.ParseException
 
 class PastilleroActivity : AppCompatActivity() {
+    private lateinit var estado: TextView
+    private lateinit var botonConexion: Button
+    private lateinit var cuerpoConexion: LinearLayout
+    private lateinit var indicadorEstado: LinearLayout
+    private lateinit var textoIndicadorEstado: TextView
+    private lateinit var puntoEstado: View
+    private lateinit var valorBluetooth: TextView
+    private lateinit var valorBateria: TextView
+    private lateinit var valorSincronizacion: TextView
+    private lateinit var valorCompartimentos: TextView
+    private lateinit var valorProximaAlarma: TextView
+    private lateinit var valorTiempoFuncionamiento: TextView
+    private lateinit var valorReloj: TextView
+    private var claveConfirmacionMostrada: String? = null
+    private var volviendoDeAjustes = false
+    private var conectarTrasPermisoBluetooth = false
+    private var iniciada = false
+    private var ultimaSincronizacion = 0L
+    private var proximaAlarmaVerificada = false
+    private var horaProximaAlarma = ""
+    private var compartimentoProximaAlarma = 0
+    private var tiempoFuncionamientoMs = 0L
+    private var tiempoFuncionamientoObservadoEn = 0L
+    private var relojArduino = ""
 
-
-    private lateinit var textoEstado: TextView
-    private lateinit var textoProgramacion: TextView
-    private var referencia: DatabaseReference? = null
-    private var escucha: ValueEventListener? = null
-    private var uid = ""
-    // Conserva los últimos recordatorios recibidos de Firebase.
-    private var datosRecordatorios: DataSnapshot? = null
-    // Avisos que están esperando que el usuario confirme la toma.
-    private val tomasPendientes = linkedMapOf<String, Map<String, Any>>()
-    // Identificadores de las tomas que ya se confirmaron.
-    private val tomasConfirmadas = mutableSetOf<String>()
-    // Evita guardar varias veces por presionar repetidamente el botón.
-    private var guardandoToma = false
-    // Primero debemos consultar qué tomas ya están confirmadas.
-    private var historialListo = false
-    // Permite programar tareas en el hilo que actualiza la pantalla.
-    private val manejador = Handler(Looper.getMainLooper())
-    private lateinit var conexionBluetooth: ConexionPastillero
-    private val permisoBluetooth = registerForActivityResult(ActivityResultContracts.RequestPermission()) { concedido ->
-        if (concedido) elegirDispositivoEmparejado() else textoEstado.text = "Permiso Bluetooth necesario para conectar el HC-05."
-    }
-
-    // Esta tarea revisará los horarios y volverá a ejecutarse cada segundo.
-    private val revisarCadaSegundo = object : Runnable {
-        override fun run() {
-            revisarHorarios()
-
-            manejador.postDelayed(this, 1000)
+    private val actualizarMetricas =
+        object : Runnable {
+            override fun run() {
+                if (!iniciada) return
+                mostrarMetricasEnVivo()
+                window.decorView.postDelayed(this, 30_000L)
+            }
         }
-    }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    private val solicitudPermiso =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val conectar = conectarTrasPermisoBluetooth
+            conectarTrasPermisoBluetooth = false
+            if (granted && conectar) conectarPastilleroVinculadoEnAjustes()
+            else if (!granted) mostrarEstado(getString(R.string.device_disconnected))
+        }
+
+    private val eventosAplicacion =
+        object : BroadcastReceiver() {
+            override fun onReceive(contexto: Context, intencion: Intent) {
+                when (intencion.action) {
+                    DeviceConnectionService.ACCION_ESTADO ->
+                        mostrarEstado(
+                            intencion.getStringExtra(DeviceConnectionService.DATO_ESTADO).orEmpty()
+                        )
+                    DeviceConnectionService.ACCION_TOMA_PENDIENTE -> consumirAlarmaPendiente()
+                    DeviceConnectionService.ACCION_TELEMETRIA -> mostrarTelemetria(intencion)
+                }
+            }
+        }
+
+    override fun onCreate(estadoGuardado: Bundle?) {
+        super.onCreate(estadoGuardado)
         enableEdgeToEdge()
-
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = true
         setContentView(R.layout.activity_pastillero)
-        val pantalla = findViewById<android.view.View>(R.id.main)
-        ViewCompat.setOnApplyWindowInsetsListener(pantalla) { vista, insets ->
-            val barras = insets.getInsets(
-                WindowInsetsCompat.Type.systemBars()
-            )
-            vista.setPadding(
-                barras.left,
-                barras.top,
-                barras.right,
-                barras.bottom
-            )
-            insets
+        val raiz = findViewById<View>(R.id.main)
+        ViewCompat.setOnApplyWindowInsetsListener(raiz) { vista, margenesSistema ->
+            val barras = margenesSistema.getInsets(WindowInsetsCompat.Type.systemBars())
+            vista.setPadding(barras.left, barras.top, barras.right, barras.bottom)
+            margenesSistema
         }
+        ViewCompat.requestApplyInsets(raiz)
 
-        ViewCompat.requestApplyInsets(pantalla)
-
-
-        textoEstado = findViewById(R.id.tvEstadoPastillero)
-        textoProgramacion = findViewById(R.id.tvProgramacionPastillero)
-        conexionBluetooth = ConexionPastillero(
-            alCambiarEstado = { estado -> runOnUiThread {
-                textoEstado.text = estado
-                if (estado.startsWith("Conectado")) datosRecordatorios?.let(::sincronizarConArduino)
-            } },
-            alRecibirLinea = { linea -> runOnUiThread { procesarRespuestaArduino(linea) } }
-        )
-        findViewById<Button>(R.id.btnBluetoothPastillero).setOnClickListener {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
-            ) {
-                permisoBluetooth.launch(Manifest.permission.BLUETOOTH_CONNECT)
-            } else elegirDispositivoEmparejado()
-        }
-        val usuario = FirebaseAuth.getInstance().currentUser
-
-        if (usuario == null) {
+        if (FirebaseAuth.getInstance().currentUser == null) {
             finish()
             return
         }
+        estado = findViewById(R.id.tvEstadoPastillero)
+        botonConexion = findViewById(R.id.btnBluetoothPastillero)
+        cuerpoConexion = findViewById(R.id.deviceConnectionBody)
+        indicadorEstado = findViewById(R.id.deviceStatusBadge)
+        textoIndicadorEstado = findViewById(R.id.deviceStatusBadgeText)
+        puntoEstado = findViewById(R.id.deviceStatusDot)
+        valorBluetooth =
+            configurarMetrica(
+                R.id.metricBluetooth,
+                R.string.device_metric_bluetooth,
+                R.drawable.ic_bluetooth,
+                R.color.device_accent,
+            )
+        valorBateria =
+            configurarMetrica(
+                R.id.metricBattery,
+                R.string.device_metric_battery,
+                R.drawable.ic_battery_full,
+                R.color.device_accent,
+            )
+        valorSincronizacion =
+            configurarMetrica(
+                R.id.metricSync,
+                R.string.device_metric_sync,
+                R.drawable.ic_sync,
+                R.color.device_accent,
+            )
+        valorCompartimentos =
+            configurarMetrica(
+                R.id.metricCompartments,
+                R.string.device_metric_compartments,
+                R.drawable.ic_grid_view,
+                R.color.device_accent,
+            )
+        configurarFilaEstado(R.id.deviceUptimeRow, R.string.device_uptime_label, R.drawable.ic_schedule)
+        configurarFilaEstado(R.id.deviceClockRow, R.string.device_clock_label, R.drawable.ic_schedule)
+        configurarFilaEstado(
+            R.id.deviceNextAlarmRow,
+            R.string.device_row_next_alarm,
+            R.drawable.ic_schedule,
+        )
+        valorTiempoFuncionamiento = obtenerValorFila(R.id.deviceUptimeRow)
+        valorReloj = obtenerValorFila(R.id.deviceClockRow)
+        valorProximaAlarma = obtenerValorFila(R.id.deviceNextAlarmRow)
+        findViewById<View>(R.id.btnVolver).setOnClickListener { finish() }
+        adaptarDistribucion()
+        botonConexion.setOnClickListener {
+            if (DeviceConnectionService.estaConectado()) {
+                DeviceConnectionService.desconectar(this)
+                mostrarEstado(getString(R.string.device_disconnected))
+            } else abrirAjustesBluetooth()
+        }
+        mostrarEstado(DeviceConnectionService.obtenerEstadoActual())
+        mostrarTelemetriaDesdePreferencias()
+        consumirAlarmaPendiente()
+    }
 
-        uid = usuario.uid
+    private fun configurarMetrica(
+        idContenedor: Int,
+        idTitulo: Int,
+        idIcono: Int,
+        idColorIcono: Int,
+    ): TextView {
+        val contenedor = findViewById<View>(idContenedor)
+        contenedor.findViewById<TextView>(R.id.metricTitle).setText(idTitulo)
+        contenedor.findViewById<ImageView>(R.id.metricIcon).apply {
+            setImageResource(idIcono)
+            imageTintList = ContextCompat.getColorStateList(this@PastilleroActivity, idColorIcono)
+        }
+        return contenedor.findViewById(R.id.metricValue)
+    }
 
-        referencia = FirebaseDatabase.getInstance(
-            "https://recordatoriodemedicament-90e4f-default-rtdb.firebaseio.com/"
-        ).getReference("usuarios")
-            .child(uid)
-            .child("recordatorios")
-        findViewById<Button>(R.id.btnConfirmarToma)
-            .setOnClickListener {
-                confirmarToma()
+    private fun configurarFilaEstado(idFila: Int, idEtiqueta: Int, idIcono: Int) {
+        val fila = findViewById<View>(idFila)
+        fila.findViewById<TextView>(R.id.deviceRowLabel).setText(idEtiqueta)
+        fila.findViewById<ImageView>(R.id.deviceRowIcon).setImageResource(idIcono)
+    }
+
+    private fun obtenerValorFila(idFila: Int) =
+        findViewById<View>(idFila).findViewById<TextView>(R.id.deviceRowValue)
+
+    private fun adaptarDistribucion() {
+        val anchoDp =
+            resources.configuration.screenWidthDp.takeIf { it > 0 }
+                ?: (resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt()
+        val escalaFuente = resources.configuration.fontScale.coerceAtLeast(1f)
+        val anchoDisponible = (minOf(anchoDp, 720) - 42).coerceAtLeast(1)
+        val cuadricula = findViewById<GridLayout>(R.id.deviceMetricsGrid)
+        cuadricula.columnCount = (anchoDisponible / (168f * escalaFuente)).toInt().coerceIn(1, 2)
+        val margen = (5 * resources.displayMetrics.density).toInt()
+        for (indice in 0 until cuadricula.childCount) {
+            val mosaico = cuadricula.getChildAt(indice)
+            mosaico.background =
+                ContextCompat.getDrawable(
+                    this,
+                    if (indice == 0 || indice == 3) R.drawable.bg_device_metric
+                    else R.drawable.bg_device_metric_warm,
+                )
+            val parametros =
+                (mosaico.layoutParams as? GridLayout.LayoutParams) ?: GridLayout.LayoutParams()
+            parametros.width = 0
+            parametros.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            parametros.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+            parametros.setMargins(margen, margen, margen, margen)
+            mosaico.layoutParams = parametros
+        }
+
+        val compacto = anchoDp < 390 || escalaFuente >= 1.25f
+        val encabezado = findViewById<LinearLayout>(R.id.deviceHero)
+        val textoEncabezado = findViewById<LinearLayout>(R.id.deviceHeroCopy)
+        encabezado.orientation = if (compacto) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        textoEncabezado.layoutParams =
+            (textoEncabezado.layoutParams as LinearLayout.LayoutParams).apply {
+                width = if (compacto) android.view.ViewGroup.LayoutParams.MATCH_PARENT else 0
+                weight = if (compacto) 0f else 1f
             }
+        findViewById<ImageView>(R.id.deviceHeroIllustration).apply {
+            val tamano =
+                resources.getDimensionPixelSize(
+                    if (compacto) R.dimen.ui_space_96 else R.dimen.device_hero_art_size
+                )
+            layoutParams =
+                (layoutParams as LinearLayout.LayoutParams).apply {
+                    width = tamano
+                    height = tamano
+                    marginStart =
+                        if (compacto) 0 else resources.getDimensionPixelSize(R.dimen.ui_space_8)
+                    gravity =
+                        if (compacto) android.view.Gravity.END
+                        else android.view.Gravity.CENTER_VERTICAL
+                }
+            translationY = -resources.getDimension(R.dimen.ui_space_12)
+        }
 
-        findViewById<Button>(R.id.btnVolverPastillero)
-            .setOnClickListener {
-                finish()
+        cuerpoConexion.layoutParams =
+            (cuerpoConexion.layoutParams as LinearLayout.LayoutParams).apply {
+                width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                weight = 0f
+            }
+        botonConexion.layoutParams =
+            (botonConexion.layoutParams as LinearLayout.LayoutParams).apply {
+                width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                marginStart = 0
+                topMargin = resources.getDimensionPixelSize(R.dimen.ui_space_12)
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
             }
     }
 
     override fun onStart() {
         super.onStart()
-
-        if (FirebaseAuth.getInstance().currentUser?.uid != uid) {
-            finish()
-            return
-        }
-
-        val ubicacion = referencia ?: return
-
-        textoEstado.text = "Cargando programación…"
-        cargarConfirmaciones()
-
-        escucha = object : ValueEventListener {
-
-            override fun onDataChange(datos: DataSnapshot) {
-                // Guardamos los datos para poder revisar sus horarios.
-                datosRecordatorios = datos
-
-                // Mostramos la lista de recordatorios.
-                mostrarProgramacion(datos)
-                if (conexionBluetooth.estaConectado()) sincronizarConArduino(datos)
-
-                // Revisamos inmediatamente si alguno corresponde a este minuto.
-                revisarHorarios()
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                textoEstado.text = "No se pudo leer la programación."
-                textoProgramacion.text = error.message
-            }
-        }
-
-        escucha?.let { ubicacion.addValueEventListener(it) }
-        manejador.post(revisarCadaSegundo)
-    }
-
-    @Suppress("MissingPermission")
-    private fun elegirDispositivoEmparejado() {
-        val adapter = BluetoothAdapter.getDefaultAdapter()
-        if (adapter == null) {
-            textoEstado.text = "Este teléfono no tiene Bluetooth."
-            return
-        }
-        if (!adapter.isEnabled) {
-            startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-            textoEstado.text = "Activa Bluetooth y vuelve a conectar el HC-05."
-            return
-        }
-        val dispositivos = adapter.bondedDevices.toList()
-        if (dispositivos.isEmpty()) {
-            textoEstado.text = "Empareja primero el HC-05 desde los ajustes Bluetooth del teléfono."
-            startActivity(Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS))
-            return
-        }
-        val nombres = dispositivos.map { "${it.name ?: "Dispositivo Bluetooth"} (${it.address})" }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("Selecciona el HC-05 emparejado")
-            .setItems(nombres) { _, indice -> conexionBluetooth.conectar(dispositivos[indice]) }
-            .setNegativeButton("Cancelar", null)
-            .show()
-    }
-
-    private fun sincronizarConArduino(datos: DataSnapshot) {
-        val activos = datos.children.filter { it.child("activo").value as? Boolean == true }
-        if (activos.size > 2 || activos.any { ((it.child("compartimiento").value as? Number)?.toInt() ?: 0) !in 1..2 } ||
-            activos.mapNotNull { (it.child("compartimiento").value as? Number)?.toInt() }.distinct().size != activos.size
-        ) {
-            textoEstado.text = "No sincronizado: el pastillero admite un recordatorio activo por compartimiento (1 y 2)."
-            return
-        }
-        if (activos.any {
-                (it.child("zonaHoraria").value as? String) != TimeZone.getDefault().id
-            }
-        ) {
-            textoEstado.text = "No sincronizado: conecta el teléfono con la misma zona horaria usada al crear los recordatorios."
-            return
-        }
-        val ahora = java.text.SimpleDateFormat("yyyy-MM-dd;HH:mm:ss", Locale.US).format(Date())
-        val lineas = mutableListOf("SYNC_BEGIN;${activos.size}", "TIME;$ahora")
-        for (registro in activos) {
-            val id = registro.key ?: continue
-            val slot = (registro.child("compartimiento").value as? Number)?.toInt() ?: continue
-            val hora = registro.child("hora").value as? String ?: continue
-            val dias = registro.child("diasSemana").children.mapNotNull { (it.value as? Number)?.toInt() }
-            if (dias.any { it !in 1..7 } || !hora.matches(Regex("\\d{2}:\\d{2}"))) {
-                textoEstado.text = "No sincronizado: revisa días y hora del recordatorio."
-                return
-            }
-            val mascaraDias = dias.fold(0) { mascara, dia -> mascara or (1 shl (dia - 1)) }
-            lineas.add("SLOT;$slot;$mascaraDias;$hora;$id")
-        }
-        lineas.add("SYNC_END")
-        for (linea in lineas) {
-            if (!conexionBluetooth.enviar(linea)) {
-                textoEstado.text = "No se pudo enviar la programación al Arduino."
-                return
-            }
-        }
-        textoEstado.text = "Programación enviada; esperando confirmación del Arduino…"
-    }
-
-    private fun procesarRespuestaArduino(linea: String) {
-        when {
-            linea == "SYNC_OK" -> textoEstado.text = "HC-05 conectado; programación sincronizada."
-            linea.startsWith("ERR;") -> textoEstado.text = "Arduino rechazó la sincronización: ${linea.substringAfter(';')}"
-            linea.startsWith("TAKEN;") -> registrarTomaFisica(linea)
-            linea.startsWith("ALARM_ON") -> textoEstado.text = "El pastillero está avisando una toma."
-        }
-    }
-
-    private fun registrarTomaFisica(linea: String) {
-        val campos = linea.split(';')
-        if (campos.size != 4) return
-        val slot = campos[1].toIntOrNull() ?: return
-        val fecha = campos[2]
-        val hora = campos[3]
-        val datos = datosRecordatorios ?: return
-        val fechaHora = try {
-            SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).parse("$fecha $hora")
-        } catch (_: ParseException) { null } ?: return
-        val calendario = Calendar.getInstance().apply { time = fechaHora }
-        val dia = (calendario.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1
-        val registro = datos.children.firstOrNull {
-            (it.child("activo").value as? Boolean == true) &&
-                (it.child("compartimiento").value as? Number)?.toInt() == slot &&
-                it.child("hora").value as? String == hora &&
-                it.child("diasSemana").children.any { d -> (d.value as? Number)?.toInt() == dia }
-        } ?: return
-        val idRecordatorio = registro.key ?: return
-        val idToma = "${idRecordatorio}_${fecha}_${hora.replace(":", "") }"
-        val historial = referencia?.parent?.child("historial") ?: return
-        if (idToma in tomasConfirmadas) return
-        val toma = mapOf<String, Any>(
-            "idRecordatorio" to idRecordatorio,
-            "medicamento" to (registro.child("medicamento").value as? String ?: "Sin nombre"),
-            "dosis" to (registro.child("dosis").value as? String ?: ""),
-            "compartimiento" to slot,
-            "fechaProgramada" to fecha,
-            "horaProgramada" to hora,
-            "zonaHoraria" to (registro.child("zonaHoraria").value as? String ?: TimeZone.getDefault().id),
-            "estado" to "confirmada",
-            "confirmadoEn" to ServerValue.TIMESTAMP
+        iniciada = true
+        ContextCompat.registerReceiver(
+            this,
+            eventosAplicacion,
+            IntentFilter().apply {
+                addAction(DeviceConnectionService.ACCION_ESTADO)
+                addAction(DeviceConnectionService.ACCION_TOMA_PENDIENTE)
+                addAction(DeviceConnectionService.ACCION_TELEMETRIA)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
         )
-        historial.child(idToma).setValue(toma).addOnSuccessListener {
-            tomasConfirmadas.add(idToma)
-            tomasPendientes.remove(idToma)
-            textoEstado.text = "Toma del compartimiento $slot confirmada desde el pastillero."
-            mostrarSiguienteAviso()
-        }
-    }
-
-    private fun mostrarProgramacion(datos: DataSnapshot) {
-        val nombresDias = listOf(
-            "Lunes", "Martes", "Miércoles", "Jueves",
-            "Viernes", "Sábado", "Domingo"
-        )
-
-        val recordatorios = datos.children.map { registro ->
-            val medicamento =
-                registro.child("medicamento").value as? String ?: "Sin nombre"
-
-            val dosis =
-                registro.child("dosis").value as? String ?: ""
-
-            val hora =
-                registro.child("hora").value as? String ?: ""
-
-            val zona =
-                registro.child("zonaHoraria").value as? String ?: ""
-
-            val compartimiento =
-                (registro.child("compartimiento").value as? Number)?.toInt()
-
-            val activo =
-                registro.child("activo").value as? Boolean ?: false
-
-            val dias = registro.child("diasSemana").children.mapNotNull { dia ->
-                val numero = (dia.value as? Number)?.toInt()
-
-                numero?.let { nombresDias.getOrNull(it - 1) }
-            }.joinToString(", ")
-
-            """
-                Medicamento: $medicamento
-                Dosis: $dosis
-                Días: $dias
-                Hora: $hora
-                Zona horaria: $zona
-                Compartimiento: ${compartimiento ?: "Sin asignar"}
-                Estado: ${if (activo) "Activo" else "Inactivo"}
-            """.trimIndent()
-        }
-
-        if (recordatorios.isEmpty()) {
-            textoEstado.text = "Todavía no hay programación."
-            textoProgramacion.text = "Crea un recordatorio desde el celular."
-        } else {
-            textoEstado.text =
-                "Programación cargada: ${recordatorios.size} recordatorio(s)."
-
-            textoProgramacion.text = recordatorios.joinToString("\n\n")
-        }
-    }
-
-    private fun revisarHorarios() {
-        // Esperamos a conocer las confirmaciones anteriores.
-        if (!historialListo) return
-
-        val datos = datosRecordatorios ?: return
-
-        for (registro in datos.children) {
-            val activo = registro.child("activo").value as? Boolean ?: false
-            if (!activo) continue
-
-            val idRecordatorio = registro.key ?: continue
-
-            val zona = registro.child("zonaHoraria").value as? String
-                ?: continue
-
-            val zonaHoraria = TimeZone.getTimeZone(zona)
-            val ahora = Calendar.getInstance(zonaHoraria)
-
-            // Lunes = 1, martes = 2, ..., domingo = 7.
-            val diaActual = (ahora.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1
-
-            val diasProgramados = registro.child("diasSemana").children
-                .mapNotNull { dia ->
-                    (dia.value as? Number)?.toInt()
-                }
-
-            val horaProgramada = registro.child("hora").value as? String
-                ?: continue
-
-            val formatoHora = SimpleDateFormat("HH:mm", Locale.US)
-            formatoHora.timeZone = zonaHoraria
-
-            val horaActual = formatoHora.format(ahora.time)
-
-            // Pasamos al siguiente registro si no corresponde a este minuto.
-            if (diaActual !in diasProgramados || horaActual != horaProgramada) {
-                continue
-            }
-
-            val formatoFecha = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-            formatoFecha.timeZone = zonaHoraria
-
-            val fechaProgramada = formatoFecha.format(ahora.time)
-
-            // Cada toma tiene una identificación distinta según fecha y hora.
-            val idToma =
-                "${idRecordatorio}_${fechaProgramada}_${horaProgramada.replace(":", "")}"
-
-            // No agregamos una toma que ya está confirmada o pendiente.
-            if (idToma in tomasConfirmadas || idToma in tomasPendientes) {
-                continue
-            }
-
-            val medicamento =
-                registro.child("medicamento").value as? String ?: "Sin nombre"
-
-            val dosis =
-                registro.child("dosis").value as? String ?: ""
-
-            val compartimiento =
-                (registro.child("compartimiento").value as? Number)?.toInt()
-                    ?: continue
-
-            tomasPendientes[idToma] = mapOf(
-                "idRecordatorio" to idRecordatorio,
-                "medicamento" to medicamento,
-                "dosis" to dosis,
-                "compartimiento" to compartimiento,
-                "fechaProgramada" to fechaProgramada,
-                "horaProgramada" to horaProgramada,
-                "zonaHoraria" to zona
-            )
-        }
-
-        mostrarSiguienteAviso()
-    }
-    private fun cargarConfirmaciones() {
-        historialListo = false
-
-        val historial = referencia?.parent?.child("historial") ?: return
-
-        historial.get().addOnCompleteListener { tarea ->
-            if (
-                isFinishing ||
-                isDestroyed ||
-                FirebaseAuth.getInstance().currentUser?.uid != uid
-            ) {
-                return@addOnCompleteListener
-            }
-
-            if (tarea.isSuccessful) {
-                tomasConfirmadas.clear()
-
-                for (registro in tarea.result.children) {
-                    if (registro.child("estado").value == "confirmada") {
-                        registro.key?.let { tomasConfirmadas.add(it) }
-                    }
-                }
-
-                // Retiramos cualquier pendiente que ya figure confirmado.
-                for (id in tomasConfirmadas) {
-                    tomasPendientes.remove(id)
-                }
-
-                historialListo = true
-                revisarHorarios()
-            } else {
-                textoEstado.text =
-                    "No se pudo consultar el historial. Vuelve a abrir esta pantalla."
-            }
-        }
-    }
-
-    private fun mostrarSiguienteAviso() {
-        val textoAlarma = findViewById<TextView>(R.id.tvAlarmaPastillero)
-        val botonConfirmar = findViewById<Button>(R.id.btnConfirmarToma)
-
-        val toma = tomasPendientes.entries.firstOrNull()
-
-        if (toma == null) {
-            textoAlarma.text = "Sin tomas pendientes"
-            botonConfirmar.isEnabled = false
-            return
-        }
-
-        val datos = toma.value
-
-        textoAlarma.text = """
-        Toma pendiente
-
-        Medicamento: ${datos["medicamento"]}
-        Dosis: ${datos["dosis"]}
-        Compartimiento: ${datos["compartimiento"]}
-        Fecha: ${datos["fechaProgramada"]}
-        Hora: ${datos["horaProgramada"]}
-
-        Avisos pendientes: ${tomasPendientes.size}
-    """.trimIndent()
-
-        botonConfirmar.isEnabled = historialListo && !guardandoToma
-    }
-
-    private fun confirmarToma() {
-        if (guardandoToma || !historialListo) return
-
-        if (FirebaseAuth.getInstance().currentUser?.uid != uid) {
-            finish()
-            return
-        }
-
-        val toma = tomasPendientes.entries.firstOrNull() ?: return
-        val idToma = toma.key
-
-        val historial = referencia?.parent?.child("historial") ?: return
-
-        val confirmacion = toma.value + mapOf(
-            "estado" to "confirmada",
-            "confirmadoEn" to ServerValue.TIMESTAMP
-        )
-
-        guardandoToma = true
-        textoEstado.text = "Guardando confirmación…"
-        mostrarSiguienteAviso()
-
-        historial.child(idToma).setValue(confirmacion)
-            .addOnCompleteListener { tarea ->
-                if (
-                    isFinishing ||
-                    isDestroyed ||
-                    FirebaseAuth.getInstance().currentUser?.uid != uid
-                ) {
-                    return@addOnCompleteListener
-                }
-
-                guardandoToma = false
-
-                if (tarea.isSuccessful) {
-                    tomasConfirmadas.add(idToma)
-                    tomasPendientes.remove(idToma)
-
-                    textoEstado.text = "Confirmación guardada."
-                } else {
-                    textoEstado.text =
-                        "No se pudo guardar. Puedes volver a intentarlo."
-                }
-
-                mostrarSiguienteAviso()
-            }
+        mostrarEstado(DeviceConnectionService.obtenerEstadoActual())
+        mostrarMetricasEnVivo()
+        window.decorView.removeCallbacks(actualizarMetricas)
+        window.decorView.postDelayed(actualizarMetricas, 30_000L)
+        consumirAlarmaPendiente()
     }
 
     override fun onStop() {
-        // Detenemos la revisión del reloj al salir de esta pantalla.
-        manejador.removeCallbacks(revisarCadaSegundo)
-
-        // Dejamos de escuchar los cambios de Firebase.
-        escucha?.let { referencia?.removeEventListener(it) }
-        escucha = null
-        conexionBluetooth.desconectar()
-
+        iniciada = false
+        window.decorView.removeCallbacks(actualizarMetricas)
+        runCatching { unregisterReceiver(eventosAplicacion) }
         super.onStop()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (volviendoDeAjustes) {
+            volviendoDeAjustes = false
+            if (
+                Build.VERSION.SDK_INT >= 31 &&
+                    ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.BLUETOOTH_CONNECT,
+                    ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                conectarTrasPermisoBluetooth = true
+                solicitudPermiso.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            } else conectarPastilleroVinculadoEnAjustes()
+        }
+    }
+
+    private fun mostrarEstado(valor: String) {
+        val conectado = DeviceConnectionService.estaConectado() || valor.startsWith("Conectado")
+        val conectando = valor.startsWith("Conectando")
+        val estadoVisible =
+            when {
+                conectado -> getString(R.string.device_hc05_connected)
+                conectando || valor.startsWith("Abriendo") ->
+                    getString(R.string.device_hc05_connecting)
+                else -> getString(R.string.device_hc05_disconnected)
+            }
+        estado.text = estadoVisible
+        textoIndicadorEstado.setText(
+            when {
+                conectado -> R.string.device_active
+                conectando -> R.string.device_status_connecting
+                else -> R.string.device_disconnected
+            }
+        )
+        indicadorEstado.background =
+            ContextCompat.getDrawable(
+                this,
+                if (conectado) R.drawable.bg_device_status_active
+                else R.drawable.bg_device_status_inactive,
+            )
+        textoIndicadorEstado.setTextColor(ContextCompat.getColor(this, R.color.device_accent))
+        puntoEstado.backgroundTintList = ContextCompat.getColorStateList(this, R.color.device_accent)
+        botonConexion.setText(
+            if (conectado) R.string.device_disconnect else R.string.device_connect_short
+        )
+        botonConexion.isEnabled = !conectando
+        mostrarMetricasEnVivo()
+    }
+
+    private fun mostrarTelemetriaDesdePreferencias() {
+        val preferencias = getSharedPreferences("device_telemetry", 0)
+        ultimaSincronizacion = preferencias.getLong("last_sync", 0L)
+        proximaAlarmaVerificada = preferencias.getBoolean("next_alarm_verified", false)
+        horaProximaAlarma = preferencias.getString("next_alarm_time", "").orEmpty()
+        compartimentoProximaAlarma = preferencias.getInt("next_alarm_compartment", 0)
+        tiempoFuncionamientoMs = preferencias.getLong("uptime_ms", 0L)
+        tiempoFuncionamientoObservadoEn = SystemClock.elapsedRealtime()
+        relojArduino = preferencias.getString("arduino_clock", "").orEmpty()
+        mostrarMetricasEnVivo()
+    }
+
+    private fun mostrarTelemetria(intencion: Intent) {
+        if (intencion.hasExtra("last_sync")) ultimaSincronizacion = intencion.getLongExtra("last_sync", ultimaSincronizacion)
+        if (intencion.hasExtra("next_alarm_verified")) {
+            proximaAlarmaVerificada = intencion.getBooleanExtra("next_alarm_verified", false)
+            horaProximaAlarma = intencion.getStringExtra("next_alarm_time").orEmpty()
+            compartimentoProximaAlarma = intencion.getIntExtra("next_alarm_compartment", 0)
+        }
+        if (intencion.hasExtra("uptime_ms")) {
+            tiempoFuncionamientoMs = intencion.getLongExtra("uptime_ms", tiempoFuncionamientoMs)
+            tiempoFuncionamientoObservadoEn = SystemClock.elapsedRealtime()
+        }
+        if (intencion.hasExtra("arduino_clock"))
+            relojArduino = intencion.getStringExtra("arduino_clock").orEmpty()
+        mostrarMetricasEnVivo()
+    }
+
+    private fun mostrarMetricasEnVivo() {
+        val conectado = DeviceConnectionService.estaConectado()
+        valorBluetooth.setText(
+            if (conectado) R.string.device_metric_signal_stable
+            else R.string.device_metric_no_connection
+        )
+        valorBateria.setText(R.string.device_metric_no_sensor)
+        valorCompartimentos.setText(R.string.device_metric_compartments_value)
+        valorSincronizacion.text = formatearUltimaSincronizacion(ultimaSincronizacion)
+        val tiempoFuncionamientoActual =
+            if (tiempoFuncionamientoMs > 0L) tiempoFuncionamientoMs + (SystemClock.elapsedRealtime() - tiempoFuncionamientoObservadoEn) else 0L
+        valorTiempoFuncionamiento.text =
+            if (tiempoFuncionamientoMs > 0L) formatearTiempoFuncionamiento(tiempoFuncionamientoActual)
+            else getString(R.string.device_no_telemetry)
+        valorReloj.text = relojArduino.ifBlank { getString(R.string.device_no_telemetry) }
+        valorProximaAlarma.text =
+            when {
+                !proximaAlarmaVerificada -> getString(R.string.device_next_alarm_unverified)
+                compartimentoProximaAlarma !in 1..7 || horaProximaAlarma.isBlank() ->
+                    getString(R.string.device_no_next_alarm)
+                else ->
+                    getString(
+                        R.string.device_next_alarm_value,
+                        horaProximaAlarma,
+                        resources.getStringArray(R.array.weekday_names)[compartimentoProximaAlarma - 1],
+                    )
+            }
+    }
+
+    private fun formatearTiempoFuncionamiento(duracionMs: Long): String {
+        val segundos = duracionMs / 1_000L
+        return getString(
+            R.string.device_uptime_value,
+            segundos / 86_400L,
+            ((segundos % 86_400L) / 3_600L).toInt(),
+            ((segundos % 3_600L) / 60L).toInt(),
+            (segundos % 60L).toInt(),
+        )
+    }
+
+    private fun formatearUltimaSincronizacion(marcaTemporal: Long): String {
+        if (marcaTemporal <= 0L) return getString(R.string.device_sync_unavailable)
+        val segundos = ((System.currentTimeMillis() - marcaTemporal).coerceAtLeast(0L) / 1_000L)
+        return when {
+            segundos < 5 -> getString(R.string.device_sync_now)
+            segundos < 60 -> getString(R.string.device_sync_seconds, segundos.toInt())
+            segundos < 3_600 -> getString(R.string.device_sync_minutes, (segundos / 60).toInt())
+            segundos < 86_400 -> getString(R.string.device_sync_hours, (segundos / 3_600).toInt())
+            else -> getString(R.string.device_sync_days, (segundos / 86_400).toInt())
+        }
+    }
+
+    private fun abrirAjustesBluetooth() {
+        volviendoDeAjustes = true
+        estado.setText(R.string.device_opening_bluetooth)
+        runCatching { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
+            .onFailure {
+                volviendoDeAjustes = false
+                mostrarEstado("Error")
+            }
+    }
+
+    @Suppress("MissingPermission")
+    private fun conectarPastilleroVinculadoEnAjustes() {
+        volviendoDeAjustes = false
+        val adaptador = BluetoothAdapter.getDefaultAdapter()
+        if (adaptador == null || !adaptador.isEnabled) {
+            mostrarEstado("Desconectado")
+            return
+        }
+        val pastilleros =
+            adaptador.bondedDevices.filter {
+                it.name?.contains("HC-05", ignoreCase = true) == true ||
+                    it.name?.contains("HC05", ignoreCase = true) == true
+            }
+        when (pastilleros.size) {
+            0 -> mostrarEstado("Desconectado")
+            1 -> {
+                mostrarEstado("Conectando")
+                DeviceConnectionService.conectar(this, pastilleros.single().address)
+            }
+            else ->
+                AlertDialog.Builder(this)
+                    .setTitle("Selecciona tu pastillero")
+                    .setItems(pastilleros.map { it.name ?: "Pastillero" }.toTypedArray()) { _, indice ->
+                        mostrarEstado("Conectando")
+                        DeviceConnectionService.conectar(this, pastilleros[indice].address)
+                    }
+                    .setNegativeButton(R.string.action_cancel, null)
+                    .show()
+        }
+    }
+
+    private fun consumirAlarmaPendiente() {
+        val preferencias = getSharedPreferences("pending_intake", 0)
+        val idGrupo =
+            intent.getStringExtra("pending_group")
+                ?: preferencias.getStringSet("groups", emptySet())?.firstOrNull()
+        if (idGrupo != null) {
+            if (claveConfirmacionMostrada == idGrupo || isFinishing || isDestroyed) return
+            claveConfirmacionMostrada = idGrupo
+            val titulo = preferencias.getString("group_title_$idGrupo", "").orEmpty()
+            AlertDialog.Builder(this)
+                .setTitle(R.string.device_confirm_group_title)
+                .setMessage(titulo)
+                .setPositiveButton(R.string.device_confirm_yes) { _, _ ->
+                    responderGrupo(idGrupo, true)
+                }
+                .setNegativeButton(R.string.device_confirm_no) { _, _ ->
+                    responderGrupo(idGrupo, false)
+                }
+                .setOnCancelListener { claveConfirmacionMostrada = null }
+                .show()
+            intent.removeExtra("pending_group")
+            return
+        }
+        val clave =
+            intent.getStringExtra("pending_intake")
+                ?: preferencias.getStringSet("keys", emptySet())?.firstOrNull()
+                ?: return
+        if (claveConfirmacionMostrada == clave || isFinishing || isDestroyed) return
+        claveConfirmacionMostrada = clave
+        val medicamento = preferencias.getString("medicine_$clave", "Medicamento") ?: "Medicamento"
+        val dosis = preferencias.getString("dose_$clave", "").orEmpty()
+        AlertDialog.Builder(this)
+            .setTitle("¿Tomaste $medicamento?")
+            .setMessage(dosis)
+            .setPositiveButton("Sí, la tomé") { _, _ ->
+                responderToma(clave, true)
+                claveConfirmacionMostrada = null
+            }
+            .setNegativeButton("No la tomé") { _, _ ->
+                responderToma(clave, false)
+                claveConfirmacionMostrada = null
+            }
+            .setOnCancelListener { claveConfirmacionMostrada = null }
+            .show()
+        intent.removeExtra("pending_intake")
+    }
+
+    private fun responderToma(clave: String, tomada: Boolean) {
+        DoseAnswerReceiver.guardarRespuesta(this, clave, tomada) {
+            claveConfirmacionMostrada = null
+            consumirAlarmaPendiente()
+        }
+    }
+
+    private fun responderGrupo(idGrupo: String, tomada: Boolean) {
+        DoseAnswerReceiver.guardarRespuestaDeGrupo(this, idGrupo, tomada) {
+            claveConfirmacionMostrada = null
+            consumirAlarmaPendiente()
+        }
     }
 }
