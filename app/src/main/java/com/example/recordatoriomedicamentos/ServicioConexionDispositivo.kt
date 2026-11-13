@@ -30,6 +30,7 @@ class DeviceConnectionService : Service() {
         const val DATO_ESTADO = "state"
         private const val CANAL_NOTIFICACIONES = "device_connection"
         private const val ID_NOTIFICACION = 4101
+        private const val ID_NOTIFICACION_ALARMA_ACTIVA = 4102
         @Volatile private var estadoPantalla = "Desconectado"
         @Volatile private var socketConectado = false
 
@@ -250,8 +251,8 @@ class DeviceConnectionService : Service() {
             if (dias.isEmpty()) continue
             dias.forEach { dia -> horariosPorDia += dia to hora }
         }
-        if (horariosPorDia.size > AlarmSchedule.MAXIMO_HORARIOS_DIARIOS) {
-            actualizarEstado("No sincronizado: el pastillero admite hasta 24 horarios distintos por día.")
+        if (horariosPorDia.size > AlarmSchedule.MAXIMO_HORARIOS_SEMANALES) {
+            actualizarEstado("No sincronizado: el pastillero semanal admite hasta 21 horarios.")
             return
         }
         val lineas = mutableListOf("SYNC_BEGIN;${horariosPorDia.size}")
@@ -310,10 +311,42 @@ class DeviceConnectionService : Service() {
                 val dia = campos.getOrNull(1)?.toIntOrNull()?.takeIf { it in 1..7 } ?: return
                 val nombreDia = resources.getStringArray(R.array.weekday_names)[dia - 1]
                 actualizarEstado("Alarma activa · $nombreDia")
+                mostrarAlarmaEnCurso(dia, campos.getOrNull(3).orEmpty())
             }
+            linea == "ALARM_OFF" -> (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(ID_NOTIFICACION_ALARMA_ACTIVA)
             linea.startsWith("TELEMETRY;") -> procesarTelemetria(linea)
         }
     }
+
+    private fun mostrarAlarmaEnCurso(dia: Int, hora: String) {
+        val coincidencias = instantaneaAlarmas?.children?.toList().orEmpty().filter { item ->
+            item.child("activo").getValue(Boolean::class.java) == true &&
+                AlarmSchedule.dias(item).contains(dia) &&
+                item.child("hora").getValue(String::class.java) == hora
+        }
+        val detalle = coincidencias.joinToString("\n") { item ->
+            val nombre = item.child("medicamento").getValue(String::class.java).orEmpty()
+            val dosis = item.child("dosis").getValue(String::class.java).orEmpty()
+            if (dosis.isBlank()) "• $nombre" else "• $nombre · $dosis"
+        }.ifBlank { "Revisa tu toma programada." }
+        val abrir = PendingIntent.getActivity(
+            this, ID_NOTIFICACION_ALARMA_ACTIVA,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notificacion = NotificationCompat.Builder(this, "intake")
+            .setSmallIcon(R.drawable.ic_medication)
+            .setContentTitle("Es hora de tu medicamento · ${weekdays[dia - 1]}")
+            .setContentText("$hora · ${coincidencias.size} medicamento(s)")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(detalle))
+            .setContentIntent(abrir)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .build()
+        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(ID_NOTIFICACION_ALARMA_ACTIVA, notificacion)
+    }
+
+    private val weekdays = listOf("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
 
     private fun registrarSincronizacionExitosa() {
         val marcaTemporal = System.currentTimeMillis()

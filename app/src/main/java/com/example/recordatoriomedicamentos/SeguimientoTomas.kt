@@ -152,6 +152,8 @@ object DoseOccurrenceTracker {
             "medicamento" to (instantaneaAlarma.child("medicamento").getValue(String::class.java) ?: ""),
             "dosis" to (instantaneaAlarma.child("dosis").getValue(String::class.java) ?: ""),
             "diaCompartimento" to AlarmSchedule.diaSemanaDesdeLunes(calendario),
+            "franja" to (instantaneaAlarma.child("franja").getValue(Int::class.java)
+                ?: when (calendario.get(Calendar.HOUR_OF_DAY)) { in 0..11 -> 0; in 12..17 -> 1; else -> 2 }),
             "fechaProgramada" to
                 SimpleDateFormat("yyyy-MM-dd", Locale.US)
                     .apply { timeZone = zonaHoraria }

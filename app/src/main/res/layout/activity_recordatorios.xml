@@ -16,11 +16,7 @@
           </LinearLayout>
           <ImageView android:id="@+id/alarmHeroIllustration" android:layout_width="@dimen/device_hero_art_size" android:layout_height="@dimen/device_hero_art_size" android:layout_marginStart="@dimen/ui_space_8" android:contentDescription="@string/alarm_illustration_description" android:scaleType="fitCenter" android:src="@drawable/alarm_clock_illustration"/>
         </LinearLayout>
-        <GridLayout android:id="@+id/alarmKpiGrid" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ui_space_8" android:columnCount="3" android:useDefaultMargins="false">
-          <include android:id="@+id/alarmScheduledKpi" layout="@layout/view_alarm_kpi" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_columnWeight="1" android:layout_margin="3dp"/>
-          <include android:id="@+id/alarmActiveKpi" layout="@layout/view_alarm_kpi" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_columnWeight="1" android:layout_margin="3dp"/>
-          <include android:id="@+id/alarmFinalizedKpi" layout="@layout/view_alarm_kpi" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_columnWeight="1" android:layout_margin="3dp"/>
-        </GridLayout>
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnGlobalReminder" style="@style/PrimaryActionButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ui_space_8" android:minHeight="52dp" android:text="Recordatorio Global" app:icon="@drawable/ic_add" app:iconGravity="textStart" app:iconTint="@color/white"/>
         <TextView android:id="@+id/tvRecordatorios" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ui_space_16" android:accessibilityLiveRegion="polite" android:text="@string/loading_alarms" android:textColor="@color/text_secondary" android:textAppearance="@style/MedAlarmTextSecondary" android:visibility="visible"/>
         <FrameLayout android:id="@+id/alarmContentArea" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ui_space_8" android:minHeight="280dp">
           <LinearLayout android:id="@+id/listRecordatorios" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone"/>
@@ -30,7 +26,6 @@
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ui_space_8" android:gravity="center" android:text="@string/alarms_empty_hint" android:textColor="@color/text_secondary" android:textAppearance="@style/MedAlarmTextBody"/>
           </LinearLayout>
         </FrameLayout>
-        <com.google.android.material.button.MaterialButton android:id="@+id/btnAddAlarm" style="@style/PrimaryActionButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:layout_marginTop="@dimen/ui_space_16" android:minHeight="52dp" android:text="@string/action_new_alarm" app:icon="@drawable/ic_add" app:iconGravity="textStart" app:iconTint="@color/white"/>
       </com.example.recordatoriomedicamentos.AdaptiveContentLayout>
     </com.example.recordatoriomedicamentos.MedAlarmRoot>
   </ScrollView>

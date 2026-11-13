@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit
 
 /** Reglas compartidas de horarios semanales y limpieza idempotente del esquema anterior. */
 object AlarmSchedule {
-    const val MAXIMO_HORARIOS_DIARIOS = 168 // 24 horarios distintos por cada día de la semana.
+    const val MAXIMO_HORARIOS_SEMANALES = 21 // Tres franjas por día durante siete días.
 
     fun dias(instantanea: DataSnapshot): Set<Int> =
         instantanea

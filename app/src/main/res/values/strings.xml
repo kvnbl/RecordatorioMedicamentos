@@ -104,7 +104,7 @@
   <string name="alarm_prepare_error">No se pudo preparar la alarma. Int&#xE9;ntalo nuevamente.</string>
   <string name="alarm_saving">Guardando alarma&#x2026;</string>
   <string name="alarm_list_title">Tus alarmas</string>
-  <string name="alarm_list_subtitle">Gestiona, edita y elimina tus alarmas programadas</string>
+  <string name="alarm_list_subtitle">Organiza tus medicamentos por día y momento de toma</string>
   <string name="alarm_form_subtitle">Elige la hora, los d&#xED;as y los datos del medicamento.</string>
   <string name="alarm_illustration_description">Reloj despertador</string>
   <string name="alarm_kpi_scheduled">Programadas</string>
@@ -126,7 +126,7 @@
   <string name="compartment_two">2</string>
   <string name="loading_alarms">Consultando alarmas&#x2026;</string>
   <string name="alarms_empty">No hay alarmas pendientes</string>
-  <string name="alarms_empty_hint">Toca &#xAB;Nueva alarma&#xBB; para agregar tu primer horario de medicamento.</string>
+  <string name="alarms_empty_hint">Toca &#xAB;Recordatorio Global&#xBB; o el signo + de una franja para agregar medicamentos.</string>
   <string name="alarm_saved">Alarma guardada.</string>
   <string name="alarm_updated">Alarma actualizada.</string>
   <string name="alarm_save_error">No se pudo guardar. Revisa tu conexi&#xF3;n e int&#xE9;ntalo nuevamente.</string>
