@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStream
@@ -48,12 +49,21 @@ class ConexionPastillero(
                         if (generacion.get() == intento && !activa.get()) {
                             tiempoAgotado.set(true)
                             try {
-                                socketLocal.close()
+                                socketLocal?.close()
                             } catch (_: Exception) {}
                         }
                     }
                     manejadorPrincipal.postDelayed(tareaTiempoEspera, TIEMPO_ESPERA_CONEXION_MS)
-                    socketLocal.connect()
+                    try {
+                        socketLocal.connect()
+                    } catch (falloSeguro: java.io.IOException) {
+                        Log.w("PastilleroBluetooth", "SPP seguro falló; probando RFCOMM inseguro", falloSeguro)
+                        socketLocal?.close()
+                        if (generacion.get() != intento || tiempoAgotado.get()) throw falloSeguro
+                        socketLocal = dispositivo.createInsecureRfcommSocketToServiceRecord(UUID_SERVICIO_SPP)
+                        synchronized(this) { socketBluetooth = socketLocal }
+                        socketLocal.connect()
+                    }
                     manejadorPrincipal.removeCallbacks(tareaTiempoEspera)
                     if (generacion.get() != intento) {
                         socketLocal.close()
@@ -69,11 +79,13 @@ class ConexionPastillero(
                         alRecibirLinea(linea.trim())
                     }
                     if (generacion.get() == intento && activa.get()) {
+                        Log.w("PastilleroBluetooth", "Lectura terminada por el dispositivo remoto")
                         alCambiarEstado("Bluetooth desconectado: el HC-05 cerró la conexión.")
                     }
                 } catch (fallo: Exception) {
                     manejadorPrincipal.removeCallbacksAndMessages(null)
                     if (generacion.get() == intento) {
+                        Log.w("PastilleroBluetooth", "Error del socket", fallo)
                         val detalle =
                             if (tiempoAgotado.get()) {
                                 "No se pudo conectar en 15 segundos. Comprueba que el HC-05 esté encendido y libre."
@@ -109,7 +121,10 @@ class ConexionPastillero(
             flujo.write((linea + "\n").toByteArray(Charsets.UTF_8))
             flujo.flush()
             true
-        } catch (_: Exception) {
+        } catch (fallo: Exception) {
+            Log.w("PastilleroBluetooth", "Falló la escritura: ${fallo.javaClass.simpleName}")
+            desconectar()
+            alCambiarEstado("Bluetooth desconectado: falló la escritura.")
             false
         }
     }

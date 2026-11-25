@@ -8,6 +8,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
+import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationCompat
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
@@ -33,10 +36,20 @@ class DeviceConnectionService : Service() {
         private const val ID_NOTIFICACION_ALARMA_ACTIVA = 4102
         @Volatile private var estadoPantalla = "Desconectado"
         @Volatile private var socketConectado = false
+        @Volatile private var pantallaDispositivoVisible = false
+        @Volatile private var proximoIntentoEn = 0L
+        fun segundosHastaReintento(): Long = ((proximoIntentoEn - SystemClock.elapsedRealtime() + 999) / 1000).coerceAtLeast(0)
 
         fun obtenerEstadoActual() = estadoPantalla
 
         fun estaConectado() = socketConectado
+
+        fun establecerPantallaVisible(visible: Boolean) {
+            pantallaDispositivoVisible = visible
+        }
+
+        fun debeMantenerConexion(contexto: Context) =
+            contexto.getSharedPreferences("device", 0).getBoolean("keep_connected", false)
 
         fun conectar(contexto: Context, direccion: String? = null) {
             val intencion =
@@ -48,6 +61,7 @@ class DeviceConnectionService : Service() {
         }
 
         fun desconectar(contexto: Context) {
+            contexto.getSharedPreferences("device", 0).edit().putBoolean("keep_connected", false).apply()
             socketConectado = false
             estadoPantalla = "Desconectado"
             contexto.sendBroadcast(
@@ -72,24 +86,53 @@ class DeviceConnectionService : Service() {
     private var protocoloListo = false
     private var estadoActual = "Desconectado"
     private var ultimaSincronizacion = 0L
+    private var intentosFallidos = 0
+    private var ultimaConsultaTelemetria = 0L
+    private var ultimaConsultaConfiguracion = 0L
     private val manejador = android.os.Handler(android.os.Looper.getMainLooper())
+    private val reintentarConexion = Runnable {
+        if (sesionDeConexionVigente()) obtenerDireccionGuardada(this)?.let(::abrirConexion)
+    }
+    private val cambiosBluetooth = object : BroadcastReceiver() {
+        override fun onReceive(contexto: Context, intencion: Intent) {
+            val estado = intencion.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)
+            if (estado == BluetoothAdapter.STATE_OFF) Log.w("PastilleroBluetooth", "Bluetooth apagado")
+            if (estado == BluetoothAdapter.STATE_ON &&
+                debeMantenerConexion(this@DeviceConnectionService)) {
+                Log.i("PastilleroBluetooth", "Bluetooth encendido; reanudando conexión")
+                manejador.removeCallbacks(reintentarConexion)
+                manejador.post(reintentarConexion)
+            }
+        }
+    }
     private val consultarEstadoPeriodicamente =
         object : Runnable {
             override fun run() {
                 if (conectado && protocoloListo) {
                     if (sincronizacionEnCurso && System.currentTimeMillis() - ultimaSincronizacion > 5000)
                         sincronizacionEnCurso = false
-                    if (!sincronizacionEnCurso) conexion?.enviar("SYNC_STATUS")
-                    conexion?.enviar("TELEMETRY")
+                    val ahora = SystemClock.elapsedRealtime()
+                    if (!sincronizacionEnCurso && ahora - ultimaConsultaConfiguracion >= 300_000L) {
+                        if (conexion?.enviar("SYNC_STATUS") == true) ultimaConsultaConfiguracion = ahora
+                    }
+                    val intervaloTelemetria = if (pantallaDispositivoVisible) 10_000L else 60_000L
+                    if (ahora - ultimaConsultaTelemetria >= intervaloTelemetria) {
+                        if (conexion?.enviar("TELEMETRY") == true) ultimaConsultaTelemetria = ahora
+                    }
                 }
-                manejador.postDelayed(this, 5000)
+                manejador.postDelayed(this, if (pantallaDispositivoVisible) 5_000L else 10_000L)
             }
         }
 
     override fun onCreate() {
         super.onCreate()
+        Log.i("PastilleroBluetooth", "Servicio creado")
         crearCanalNotificacion()
         startForeground(ID_NOTIFICACION, crearNotificacionServicio("Preparando conexión Bluetooth…"))
+        ContextCompat.registerReceiver(
+            this, cambiosBluetooth, android.content.IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),
+            ContextCompat.RECEIVER_EXPORTED,
+        )
     }
 
     override fun onBind(intencion: Intent?): IBinder? = null
@@ -97,6 +140,7 @@ class DeviceConnectionService : Service() {
     override fun onStartCommand(intencion: Intent?, indicadores: Int, idInicio: Int): Int {
         when (intencion?.action) {
             ACCION_DESCONECTAR -> {
+                getSharedPreferences("device", 0).edit().putBoolean("keep_connected", false).apply()
                 desconectarAhora()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -104,20 +148,40 @@ class DeviceConnectionService : Service() {
             }
             "ACK_EVENT" -> {
                 intencion.getStringExtra("event")?.let { idEvento -> conexion?.enviar("EVENT_ACK;$idEvento") }
-                return START_NOT_STICKY
+                return START_STICKY
             }
             ACCION_CONECTAR -> {
                 val direccion = intencion.getStringExtra(DATO_DIRECCION) ?: obtenerDireccionGuardada(this)
-                if (direccion != null) abrirConexion(direccion)
+                val idUsuario = FirebaseAuth.getInstance().currentUser?.uid
+                if (direccion != null && idUsuario != null) {
+                    getSharedPreferences("device", 0).edit()
+                        .putString("address", direccion)
+                        .putString("user_id", idUsuario)
+                        .putBoolean("keep_connected", true).apply()
+                    manejador.removeCallbacks(reintentarConexion)
+                    abrirConexion(direccion)
+                } else fallarConexion("Inicia sesión y selecciona el HC-05 para conectar.")
+            }
+            null -> {
+                val preferencias = getSharedPreferences("device", 0)
+                if (sesionDeConexionVigente()) {
+                    obtenerDireccionGuardada(this)?.let(::abrirConexion)
+                } else {
+                    preferencias.edit().putBoolean("keep_connected", false).apply()
+                    desconectarAhora()
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
             }
         }
         manejador.removeCallbacks(consultarEstadoPeriodicamente)
         manejador.postDelayed(consultarEstadoPeriodicamente, 5000)
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     @Suppress("MissingPermission")
     private fun abrirConexion(direccion: String) {
+        if (!sesionDeConexionVigente()) return
         if (conectado || conectando) return actualizarEstado(estadoActual)
         if (!tienePermisoConexion())
             return fallarConexion("Permiso Bluetooth necesario para conectar el HC-05.")
@@ -135,45 +199,60 @@ class DeviceConnectionService : Service() {
             if (adaptador.isDiscovering) adaptador.cancelDiscovery()
         } catch (_: SecurityException) {}
         conectando = true
-        getSharedPreferences("device", 0).edit().putString("address", direccion).apply()
+        manejador.removeCallbacks(reintentarConexion)
         actualizarEstado("Conectando a ${dispositivo.name ?: "HC-05"}…")
         conexion?.desconectar()
-        conexion =
-            ConexionPastillero(
+        lateinit var nuevaConexion: ConexionPastillero
+        nuevaConexion = ConexionPastillero(
                     alCambiarEstado = { estadoConexion ->
                         manejador.post {
+                            if (conexion !== nuevaConexion || !sesionDeConexionVigente()) return@post
                             conectado = estadoConexion.startsWith("Conectado")
                             socketConectado = conectado
                             conectando = estadoConexion.startsWith("Conectando")
                             actualizarEstado(estadoConexion)
                             if (conectado) {
+                                Log.i("PastilleroBluetooth", "Socket conectado")
+                                manejador.removeCallbacks(reintentarConexion)
                                 protocoloListo = false
-                                conexion?.enviar("CAPS")
+                                ultimaConsultaTelemetria = 0L
+                                ultimaConsultaConfiguracion = 0L
+                                nuevaConexion.enviar("CAPS")
                                 manejador.postDelayed(
                                     {
-                                        if (conectado && !protocoloListo)
+                                        if (conexion === nuevaConexion && conectado && !protocoloListo)
                                             actualizarEstado(
                                                 "Firmware incompatible. Actualiza el firmware del pastillero."
                                             )
                                     },
                                     3000,
                                 )
-                            } else {
+                            } else if (!conectando) {
+                                Log.w("PastilleroBluetooth", "Enlace perdido: ${estadoConexion.substringBefore(':')}")
+                                (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(ID_NOTIFICACION_ALARMA_ACTIVA)
                                 dejarEscuchaAlarmas()
-                                if (!conectando) {
-                                    manejador.post {
-                                        if (!conectado && !conectando) {
-                                            stopForeground(STOP_FOREGROUND_REMOVE)
-                                            stopSelf()
-                                        }
-                                    }
-                                }
+                                programarReintento(estadoConexion)
                             }
                         }
                     },
-                    alRecibirLinea = { linea -> manejador.post { procesarLinea(linea) } },
+                    alRecibirLinea = { linea -> manejador.post {
+                        if (conexion === nuevaConexion && sesionDeConexionVigente()) procesarLinea(linea)
+                    } },
                 )
-                .also { it.conectar(dispositivo) }
+        conexion = nuevaConexion
+        nuevaConexion.conectar(dispositivo)
+    }
+
+    private fun programarReintento(causa: String = "No se pudo conectar al pastillero.") {
+        if (!sesionDeConexionVigente()) return
+        val pausas = longArrayOf(2_000L, 5_000L, 10_000L, 30_000L, 60_000L)
+        val pausa = pausas[intentosFallidos.coerceAtMost(pausas.lastIndex)]
+        proximoIntentoEn = SystemClock.elapsedRealtime() + pausa
+        intentosFallidos++
+        Log.i("PastilleroBluetooth", "Nuevo intento en ${pausa / 1000} s")
+        actualizarEstado("RETRY")
+        manejador.removeCallbacks(reintentarConexion)
+        manejador.postDelayed(reintentarConexion, pausa)
     }
 
     private fun tienePermisoConexion() =
@@ -181,14 +260,16 @@ class DeviceConnectionService : Service() {
             checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) ==
                 PackageManager.PERMISSION_GRANTED
 
+    private fun sesionDeConexionVigente(): Boolean {
+        val preferencias = getSharedPreferences("device", 0)
+        return preferencias.getBoolean("keep_connected", false) &&
+            preferencias.getString("user_id", null) == FirebaseAuth.getInstance().currentUser?.uid
+    }
+
     private fun fallarConexion(mensaje: String) {
         actualizarEstado(mensaje)
-        manejador.post {
-            if (!conectado && !conectando) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-            }
-        }
+        if (sesionDeConexionVigente()) programarReintento(mensaje)
+        else stopSelf()
     }
 
     private fun escucharAlarmas() {
@@ -196,7 +277,7 @@ class DeviceConnectionService : Service() {
             FirebaseAuth.getInstance().currentUser?.uid
                 ?: return actualizarEstado("Inicia sesión para sincronizar.")
         val referencia =
-            FirebaseDatabase.getInstance(URL_BASE_DATOS)
+            BaseDatosFirebase.getInstance()
                 .getReference("usuarios")
                 .child(idUsuario)
                 .child("recordatorios")
@@ -275,6 +356,14 @@ class DeviceConnectionService : Service() {
 
     private fun procesarLinea(linea: String) {
         when {
+            linea == "READY;WEEKDAYS7;168" -> {
+                Log.i("PastilleroBluetooth", "Arduino reiniciado; verificando programación")
+                protocoloListo = false
+                sincronizacionEnCurso = false
+                lineasConfiguracion.clear()
+                dejarEscuchaAlarmas()
+                conexion?.enviar("CAPS")
+            }
             linea == "CAPS;WEEKDAYS7;168" -> {
                 if (protocoloListo) return
                 protocoloListo = true
@@ -283,9 +372,12 @@ class DeviceConnectionService : Service() {
             }
             linea == "SYNC_OK" -> {
                 sincronizacionEnCurso = false
+                intentosFallidos = 0
                 registrarSincronizacionExitosa()
                 publicarProximaAlarma(verificada = true)
                 actualizarEstado("Conectado · programación al día")
+                if (conexion?.enviar("SYNC_STATUS") == true)
+                    ultimaConsultaConfiguracion = SystemClock.elapsedRealtime()
             }
             linea.startsWith("ERR;") -> {
                 sincronizacionEnCurso = false
@@ -311,34 +403,63 @@ class DeviceConnectionService : Service() {
                 val dia = campos.getOrNull(1)?.toIntOrNull()?.takeIf { it in 1..7 } ?: return
                 val nombreDia = resources.getStringArray(R.array.weekday_names)[dia - 1]
                 actualizarEstado("Alarma activa · $nombreDia")
-                mostrarAlarmaEnCurso(dia, campos.getOrNull(3).orEmpty())
+                mostrarAlarmaEnCurso(dia, campos.getOrNull(2).orEmpty(), campos.getOrNull(3).orEmpty())
             }
-            linea == "ALARM_OFF" -> (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(ID_NOTIFICACION_ALARMA_ACTIVA)
+            linea == "ALARM_OFF" -> {
+                (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(ID_NOTIFICACION_ALARMA_ACTIVA)
+            }
             linea.startsWith("TELEMETRY;") -> procesarTelemetria(linea)
         }
     }
 
-    private fun mostrarAlarmaEnCurso(dia: Int, hora: String) {
-        val coincidencias = instantaneaAlarmas?.children?.toList().orEmpty().filter { item ->
+    private fun mostrarAlarmaEnCurso(dia: Int, fecha: String, hora: String) {
+        val alarmasDelDia = instantaneaAlarmas?.children?.toList().orEmpty().filter { item ->
             item.child("activo").getValue(Boolean::class.java) == true &&
-                AlarmSchedule.dias(item).contains(dia) &&
-                item.child("hora").getValue(String::class.java) == hora
+                AlarmSchedule.dias(item).contains(dia)
+        }
+        val primera = alarmasDelDia.firstOrNull {
+            it.child("hora").getValue(String::class.java) == hora
+        }
+        val franja = primera?.child("franja")?.getValue(Int::class.java)
+            ?: when (hora.substringBefore(':').toIntOrNull() ?: 8) {
+                in 0..11 -> 0
+                in 12..17 -> 1
+                else -> 2
+            }
+        val coincidencias = alarmasDelDia.filter { item ->
+            val horaItem = item.child("hora").getValue(String::class.java).orEmpty()
+            val franjaItem = item.child("franja").getValue(Int::class.java)
+                ?: when (horaItem.substringBefore(':').toIntOrNull() ?: 8) {
+                    in 0..11 -> 0
+                    in 12..17 -> 1
+                    else -> 2
+                }
+            franjaItem == franja
         }
         val detalle = coincidencias.joinToString("\n") { item ->
             val nombre = item.child("medicamento").getValue(String::class.java).orEmpty()
             val dosis = item.child("dosis").getValue(String::class.java).orEmpty()
-            if (dosis.isBlank()) "• $nombre" else "• $nombre · $dosis"
-        }.ifBlank { "Revisa tu toma programada." }
+            if (dosis.isBlank()) nombre else "$nombre · $dosis"
+        }
+        val nombreFranja = listOf("Mañana", "Tarde", "Noche").getOrElse(franja) { "" }
+        getSharedPreferences("active_alarm", 0).edit()
+            .putString("event", "${dia}_${fecha}_$hora")
+            .putString("title", "Medicamentos para tomar · $nombreFranja")
+            .putString("medicines", detalle)
+            .apply()
+        (application as MedAlarmApplication).alarmaActualizada()
         val abrir = PendingIntent.getActivity(
             this, ID_NOTIFICACION_ALARMA_ACTIVA,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            Intent(this, MainActivity::class.java)
+                .putExtra("show_active_alarm", true)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notificacion = NotificationCompat.Builder(this, "intake")
             .setSmallIcon(R.drawable.ic_medication)
             .setContentTitle("Es hora de tu medicamento · ${weekdays[dia - 1]}")
             .setContentText("$hora · ${coincidencias.size} medicamento(s)")
-            .setStyle(NotificationCompat.BigTextStyle().bigText(detalle))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(detalle.lines().filter(String::isNotBlank).joinToString("\n") { "• $it" }.ifBlank { "Revisa tu toma programada." }))
             .setContentIntent(abrir)
             .setOngoing(true)
             .setAutoCancel(false)
@@ -347,6 +468,11 @@ class DeviceConnectionService : Service() {
     }
 
     private val weekdays = listOf("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
+
+    private fun limpiarAlarmaActiva() {
+        getSharedPreferences("active_alarm", 0).edit().clear().apply()
+        (application as MedAlarmApplication).alarmaActualizada()
+    }
 
     private fun registrarSincronizacionExitosa() {
         val marcaTemporal = System.currentTimeMillis()
@@ -657,6 +783,7 @@ class DeviceConnectionService : Service() {
                 valor.startsWith("Preparando") -> getString(R.string.device_connecting)
                 valor.startsWith("Conectado") -> getString(R.string.device_connected)
                 valor.startsWith("Conectando") -> getString(R.string.device_connecting)
+                valor == "RETRY" -> "No se pudo conectar con el pastillero. Reintentando."
                 valor == "Desconectado" -> getString(R.string.device_disconnected)
                 else -> getString(R.string.device_connection_lost)
             }
@@ -664,7 +791,7 @@ class DeviceConnectionService : Service() {
             .setSmallIcon(R.drawable.ic_bluetooth)
             .setContentTitle(getString(R.string.nav_device))
             .setContentText(estadoVisible)
-            .setOngoing(conectado || conectando)
+            .setOngoing(debeMantenerConexion(this))
             .build()
     }
 
@@ -689,6 +816,8 @@ class DeviceConnectionService : Service() {
     }
 
     private fun desconectarAhora() {
+        manejador.removeCallbacks(reintentarConexion)
+        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(ID_NOTIFICACION_ALARMA_ACTIVA)
         val estabaActivo = conectado || conectando || estadoPantalla != "Desconectado"
         conectado = false
         conectando = false
@@ -704,11 +833,12 @@ class DeviceConnectionService : Service() {
     }
 
     override fun onDestroy() {
+        Log.i("PastilleroBluetooth", "Servicio destruido")
+        unregisterReceiver(cambiosBluetooth)
         desconectarAhora()
         super.onDestroy()
     }
 
-    private val URL_BASE_DATOS = "https://recordatoriodemedicament-90e4f-default-rtdb.firebaseio.com/"
 }
 
 class DoseAnswerReceiver : BroadcastReceiver() {

@@ -17,7 +17,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
-import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.MutableData
 import com.google.firebase.database.Transaction
 import java.text.SimpleDateFormat
@@ -36,8 +35,6 @@ object DoseOccurrenceTracker {
     const val ESTADO_NO_TOMADA = "no_tomada"
     const val ESTADO_SIN_CONFIRMAR = "sin_confirmacion"
     const val VERSION_SEGUIMIENTO = 1L
-    private const val URL_BASE_DATOS =
-        "https://recordatoriodemedicament-90e4f-default-rtdb.firebaseio.com/"
     private const val DATO_ID_USUARIO = "uid"
     private const val DIAS_VENTANA = 30
     private const val OMITIDA_DESPUES_MS = 24L * 60L * 60L * 1000L
@@ -80,7 +77,7 @@ object DoseOccurrenceTracker {
 
     private fun nombreTrabajoInmediato(idUsuario: String) = "dose-occurrences-now-$idUsuario"
 
-    internal fun raiz() = FirebaseDatabase.getInstance(URL_BASE_DATOS).getReference("usuarios")
+    internal fun raiz() = BaseDatosFirebase.getInstance().getReference("usuarios")
 
     internal fun referenciaHistorial(idUsuario: String): DatabaseReference =
         raiz().child(idUsuario).child("historial")

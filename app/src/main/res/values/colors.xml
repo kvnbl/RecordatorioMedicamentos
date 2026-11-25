@@ -25,6 +25,7 @@
   <color name="feature_blue">#1378BC</color>
   <color name="feature_green">#13A160</color>
   <color name="feature_orange">#E67C13</color>
+  <color name="history_omitted_text">#805000</color>
   <color name="device_wave_strong_start">#F29A35</color>
   <color name="device_wave_strong_end">#D96B08</color>
   <color name="device_wave_light">#FDF3E6</color>

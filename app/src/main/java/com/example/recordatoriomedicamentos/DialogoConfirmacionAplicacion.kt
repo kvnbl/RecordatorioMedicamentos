@@ -50,5 +50,10 @@ object AppConfirmationDialog {
             addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             attributes = attributes.apply { dimAmount = 0.55f }
         }
+        DialogActionButtonSizer.equalize(
+            dialogo,
+            R.id.btnConfirmationCancel,
+            R.id.btnConfirmationAccept,
+        )
     }
 }

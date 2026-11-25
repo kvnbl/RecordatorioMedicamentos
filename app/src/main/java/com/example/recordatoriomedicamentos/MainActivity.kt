@@ -39,7 +39,6 @@ import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
-import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -98,6 +97,23 @@ class MainActivity : AppCompatActivity() {
             DoseOccurrenceTracker.iniciar(applicationContext, autenticacion.currentUser!!.uid)
             escucharProximaAlarma()
             mostrarConfirmacionPendiente()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (intent.getBooleanExtra("show_active_alarm", false)) {
+            intent.removeExtra("show_active_alarm")
+            (application as MedAlarmApplication).mostrarAlarma(forzar = true)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("show_active_alarm", false)) {
+            intent.removeExtra("show_active_alarm")
+            (application as MedAlarmApplication).mostrarAlarma(forzar = true)
         }
     }
 
@@ -298,7 +314,6 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, PastilleroActivity::class.java))
         }
 
-        findViewById<View>(R.id.btnNuevaAlarma).setOnClickListener { abrirNuevaAlarma() }
         findViewById<View>(R.id.tvAlarmState).setOnClickListener {
             if (findViewById<TextView>(R.id.tvAlarmState).text == getString(R.string.alarm_error)) {
                 escucharProximaAlarma()
@@ -337,6 +352,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         val apilado = escalaFuente >= 1.3f || anchoDp < 360
+        val encabezadoAlarma = findViewById<android.widget.LinearLayout>(R.id.alarmHeader)
+        encabezadoAlarma.orientation = if (apilado) android.widget.LinearLayout.VERTICAL else android.widget.LinearLayout.HORIZONTAL
+        val tituloAlarma = encabezadoAlarma.getChildAt(1) as TextView
+        tituloAlarma.layoutParams = (tituloAlarma.layoutParams as android.widget.LinearLayout.LayoutParams).apply {
+            width = if (apilado) android.view.ViewGroup.LayoutParams.MATCH_PARENT else 0
+            weight = if (apilado) 0f else 1f
+        }
+        findViewById<TextView>(R.id.tvAlarmDay).layoutParams =
+            (findViewById<TextView>(R.id.tvAlarmDay).layoutParams as android.widget.LinearLayout.LayoutParams).apply {
+                gravity = if (apilado) android.view.Gravity.START else android.view.Gravity.CENTER_VERTICAL
+                topMargin = if (apilado) (8 * resources.displayMetrics.density).toInt() else 0
+            }
         val contenidoAlarma = findViewById<android.widget.LinearLayout>(R.id.alarmContent)
         val filaPrincipalAlarma = findViewById<android.widget.LinearLayout>(R.id.alarmMainRow)
         val separador = findViewById<View>(R.id.alarmDivider)
@@ -575,20 +602,18 @@ class MainActivity : AppCompatActivity() {
             addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             attributes = attributes.apply { dimAmount = 0.55f }
         }
+        DialogActionButtonSizer.equalize(dialogo, R.id.btnLogoutNo, R.id.btnLogoutYes)
     }
 
     private fun confirmarCerrarSesion() {
         autenticacion.currentUser?.uid?.let { DoseOccurrenceTracker.detener(applicationContext, it) }
         DeviceConnectionService.desconectar(this)
+        getSharedPreferences("active_alarm", MODE_PRIVATE).edit().clear().apply()
         autenticacion.signOut()
     }
 
     private fun abrirRecordatorios() {
         startActivity(Intent(this, RecordatoriosActivity::class.java))
-    }
-
-    private fun abrirNuevaAlarma() {
-        startActivity(Intent(this, NuevaAlarmaActivity::class.java))
     }
 
     private fun autenticar(
@@ -687,9 +712,7 @@ class MainActivity : AppCompatActivity() {
         detenerEscuchaAlarmas()
         val idUsuario = autenticacion.currentUser?.uid ?: return
         val referencia =
-            FirebaseDatabase.getInstance(
-                    "https://recordatoriodemedicament-90e4f-default-rtdb.firebaseio.com/"
-                )
+            BaseDatosFirebase.getInstance()
                 .getReference("usuarios")
                 .child(idUsuario)
                 .child("recordatorios")
@@ -750,35 +773,56 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        val siguiente =
-            candidatas.values.firstOrNull()?.let { grupo ->
-                val primera = grupo.first()
-                primera.copy(
-                    medicamento = grupo.map { it.medicamento }.distinct().joinToString(", "),
-                    dosis =
-                        grupo
-                            .map { it.dosis }
-                            .filter(String::isNotBlank)
-                            .distinct()
-                            .joinToString(" · "),
-                )
-            }
+        val grupo = candidatas.values.firstOrNull()
+        val siguiente = grupo?.firstOrNull()
         if (siguiente == null) {
             findViewById<View>(R.id.alarmContent).visibility = View.GONE
             findViewById<TextView>(R.id.tvAlarmDay).visibility = View.GONE
             mostrarEstadoAlarma(getString(R.string.alarm_empty))
             return
         }
-        findViewById<View>(R.id.alarmContent).visibility = View.VISIBLE
-        findViewById<TextView>(R.id.tvAlarmMedicine).text = siguiente.medicamento
-        findViewById<TextView>(R.id.tvAlarmDose).text = siguiente.dosis
-        findViewById<TextView>(R.id.tvAlarmTime).text =
-            AlarmTimeFormatter.formatear(siguiente.marcaTiempo, siguiente.zona)
+        val lista = findViewById<android.widget.LinearLayout>(R.id.alarmContent)
+        lista.visibility = View.VISIBLE
+        findViewById<View>(R.id.alarmMainRow).visibility = View.GONE
+        if (lista.childCount > 1) lista.removeViews(1, lista.childCount - 1)
+        lista.background = null
+        lista.setPadding(0, 0, 0, 0)
+        val densidad = resources.displayMetrics.density
+        fun dp(valor: Int) = (valor * densidad).toInt()
+        grupo.orEmpty().forEach { alarma ->
+            val fila = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                background = getDrawable(R.drawable.bg_alarm_inner)
+                setPadding(dp(16), dp(14), dp(16), dp(14))
+                layoutParams = android.widget.LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) }
+            }
+            fila.addView(android.widget.ImageView(this).apply {
+                setImageResource(R.drawable.history_pill)
+                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                layoutParams = android.widget.LinearLayout.LayoutParams(dp(48), dp(48))
+            })
+            fila.addView(android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                layoutParams = android.widget.LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(12) }
+                addView(TextView(this@MainActivity).apply {
+                    text = alarma.medicamento
+                    setTextAppearance(R.style.MedAlarmHistoryRecordTitle)
+                    setTextColor(getColor(R.color.text_primary))
+                })
+                addView(TextView(this@MainActivity).apply {
+                    text = alarma.dosis
+                    setTextAppearance(R.style.MedAlarmTextSecondary)
+                    setTextColor(getColor(R.color.text_secondary))
+                    visibility = if (alarma.dosis.isBlank()) View.GONE else View.VISIBLE
+                })
+            })
+            lista.addView(fila)
+        }
         val hoy = Calendar.getInstance(siguiente.zona)
         val manana = (hoy.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
         val indicadorDia = findViewById<TextView>(R.id.tvAlarmDay)
-        indicadorDia.text =
-            when {
+        val diaTexto = when {
                 mismaFecha(siguiente.calendario, hoy) -> getString(R.string.alarm_today)
                 mismaFecha(siguiente.calendario, manana) -> getString(R.string.alarm_tomorrow)
                 else ->
@@ -786,6 +830,7 @@ class MainActivity : AppCompatActivity() {
                         .apply { timeZone = siguiente.zona }
                         .format(Date(siguiente.marcaTiempo))
             }
+        indicadorDia.text = "$diaTexto · ${AlarmTimeFormatter.formatear(siguiente.marcaTiempo, siguiente.zona)}"
         indicadorDia.visibility = View.VISIBLE
         mostrarEstadoAlarma("")
     }

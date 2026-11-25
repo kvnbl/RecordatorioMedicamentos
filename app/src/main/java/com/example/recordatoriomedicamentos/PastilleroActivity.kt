@@ -26,6 +26,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.google.firebase.auth.FirebaseAuth
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class PastilleroActivity : AppCompatActivity() {
     private lateinit var estado: TextView
@@ -52,13 +55,16 @@ class PastilleroActivity : AppCompatActivity() {
     private var tiempoFuncionamientoMs = 0L
     private var tiempoFuncionamientoObservadoEn = 0L
     private var relojArduino = ""
+    private var ultimaTelemetriaEn = 0L
+    private var relojArduinoBaseMs = 0L
+    private var relojObservadoEn = 0L
 
     private val actualizarMetricas =
         object : Runnable {
             override fun run() {
                 if (!iniciada) return
-                mostrarMetricasEnVivo()
-                window.decorView.postDelayed(this, 30_000L)
+                mostrarEstado(DeviceConnectionService.obtenerEstadoActual())
+                window.decorView.postDelayed(this, 1_000L)
             }
         }
 
@@ -67,8 +73,19 @@ class PastilleroActivity : AppCompatActivity() {
             val conectar = conectarTrasPermisoBluetooth
             conectarTrasPermisoBluetooth = false
             if (granted && conectar) conectarPastilleroVinculadoEnAjustes()
+            else if (granted && DeviceConnectionService.debeMantenerConexion(this))
+                DeviceConnectionService.conectar(this)
             else if (!granted) mostrarEstado(getString(R.string.device_disconnected))
         }
+
+    private val solicitudNotificaciones =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    private fun solicitarNotificaciones() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) solicitudNotificaciones.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
 
     private val eventosAplicacion =
         object : BroadcastReceiver() {
@@ -148,10 +165,10 @@ class PastilleroActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnVolver).setOnClickListener { finish() }
         adaptarDistribucion()
         botonConexion.setOnClickListener {
-            if (DeviceConnectionService.estaConectado()) {
+            if (DeviceConnectionService.debeMantenerConexion(this)) {
                 DeviceConnectionService.desconectar(this)
                 mostrarEstado(getString(R.string.device_disconnected))
-            } else abrirAjustesBluetooth()
+            } else conectarPastilleroVinculadoEnAjustes()
         }
         mostrarEstado(DeviceConnectionService.obtenerEstadoActual())
         mostrarTelemetriaDesdePreferencias()
@@ -251,6 +268,15 @@ class PastilleroActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        DeviceConnectionService.establecerPantallaVisible(true)
+        if (DeviceConnectionService.debeMantenerConexion(this) &&
+            FirebaseAuth.getInstance().currentUser?.uid == getSharedPreferences("device", 0).getString("user_id", null)
+        ) {
+            if (Build.VERSION.SDK_INT >= 31 &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+            ) solicitudPermiso.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            else DeviceConnectionService.conectar(this)
+        }
         iniciada = true
         ContextCompat.registerReceiver(
             this,
@@ -265,11 +291,12 @@ class PastilleroActivity : AppCompatActivity() {
         mostrarEstado(DeviceConnectionService.obtenerEstadoActual())
         mostrarMetricasEnVivo()
         window.decorView.removeCallbacks(actualizarMetricas)
-        window.decorView.postDelayed(actualizarMetricas, 30_000L)
+        window.decorView.postDelayed(actualizarMetricas, 1_000L)
         consumirAlarmaPendiente()
     }
 
     override fun onStop() {
+        DeviceConnectionService.establecerPantallaVisible(false)
         iniciada = false
         window.decorView.removeCallbacks(actualizarMetricas)
         runCatching { unregisterReceiver(eventosAplicacion) }
@@ -298,10 +325,11 @@ class PastilleroActivity : AppCompatActivity() {
         val conectando = valor.startsWith("Conectando")
         val estadoVisible =
             when {
+                valor == "RETRY" -> "No se pudo conectar con el pastillero. Reintentando en ${DeviceConnectionService.segundosHastaReintento()} segundos"
                 conectado -> getString(R.string.device_hc05_connected)
                 conectando || valor.startsWith("Abriendo") ->
                     getString(R.string.device_hc05_connecting)
-                else -> getString(R.string.device_hc05_disconnected)
+                else -> if (valor == "Desconectado") getString(R.string.device_hc05_disconnected) else valor
             }
         estado.text = estadoVisible
         textoIndicadorEstado.setText(
@@ -320,9 +348,9 @@ class PastilleroActivity : AppCompatActivity() {
         textoIndicadorEstado.setTextColor(ContextCompat.getColor(this, R.color.device_accent))
         puntoEstado.backgroundTintList = ContextCompat.getColorStateList(this, R.color.device_accent)
         botonConexion.setText(
-            if (conectado) R.string.device_disconnect else R.string.device_connect_short
+            if (DeviceConnectionService.debeMantenerConexion(this)) R.string.device_disconnect else R.string.device_connect_short
         )
-        botonConexion.isEnabled = !conectando
+        botonConexion.isEnabled = true
         mostrarMetricasEnVivo()
     }
 
@@ -333,8 +361,11 @@ class PastilleroActivity : AppCompatActivity() {
         horaProximaAlarma = preferencias.getString("next_alarm_time", "").orEmpty()
         compartimentoProximaAlarma = preferencias.getInt("next_alarm_compartment", 0)
         tiempoFuncionamientoMs = preferencias.getLong("uptime_ms", 0L)
-        tiempoFuncionamientoObservadoEn = SystemClock.elapsedRealtime()
+        ultimaTelemetriaEn = preferencias.getLong("last_telemetry_at", 0L)
+        tiempoFuncionamientoObservadoEn = SystemClock.elapsedRealtime() -
+            (System.currentTimeMillis() - ultimaTelemetriaEn).coerceAtLeast(0L)
         relojArduino = preferencias.getString("arduino_clock", "").orEmpty()
+        actualizarBaseReloj()
         mostrarMetricasEnVivo()
     }
 
@@ -347,11 +378,22 @@ class PastilleroActivity : AppCompatActivity() {
         }
         if (intencion.hasExtra("uptime_ms")) {
             tiempoFuncionamientoMs = intencion.getLongExtra("uptime_ms", tiempoFuncionamientoMs)
+            ultimaTelemetriaEn = intencion.getLongExtra("telemetry_at", System.currentTimeMillis())
             tiempoFuncionamientoObservadoEn = SystemClock.elapsedRealtime()
         }
-        if (intencion.hasExtra("arduino_clock"))
+        if (intencion.hasExtra("arduino_clock")) {
             relojArduino = intencion.getStringExtra("arduino_clock").orEmpty()
+            actualizarBaseReloj()
+        }
         mostrarMetricasEnVivo()
+    }
+
+    private fun actualizarBaseReloj() {
+        relojArduinoBaseMs = runCatching {
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply { isLenient = false }
+                .parse(relojArduino)?.time ?: 0L
+        }.getOrDefault(0L)
+        relojObservadoEn = tiempoFuncionamientoObservadoEn
     }
 
     private fun mostrarMetricasEnVivo() {
@@ -363,12 +405,22 @@ class PastilleroActivity : AppCompatActivity() {
         valorBateria.setText(R.string.device_metric_no_sensor)
         valorCompartimentos.setText(R.string.device_metric_compartments_value)
         valorSincronizacion.text = formatearUltimaSincronizacion(ultimaSincronizacion)
+        val telemetriaReciente = ultimaTelemetriaEn > 0L &&
+            System.currentTimeMillis() - ultimaTelemetriaEn < 90_000L && conectado
         val tiempoFuncionamientoActual =
-            if (tiempoFuncionamientoMs > 0L) tiempoFuncionamientoMs + (SystemClock.elapsedRealtime() - tiempoFuncionamientoObservadoEn) else 0L
+            if (telemetriaReciente && tiempoFuncionamientoMs > 0L)
+                tiempoFuncionamientoMs + (SystemClock.elapsedRealtime() - tiempoFuncionamientoObservadoEn)
+            else 0L
         valorTiempoFuncionamiento.text =
-            if (tiempoFuncionamientoMs > 0L) formatearTiempoFuncionamiento(tiempoFuncionamientoActual)
+            if (telemetriaReciente && tiempoFuncionamientoMs > 0L) formatearTiempoFuncionamiento(tiempoFuncionamientoActual)
+            else if (conectado && ultimaTelemetriaEn > 0L) getString(R.string.device_telemetry_stale)
             else getString(R.string.device_no_telemetry)
-        valorReloj.text = relojArduino.ifBlank { getString(R.string.device_no_telemetry) }
+        valorReloj.text = if (telemetriaReciente && relojArduinoBaseMs > 0L) {
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(
+                Date(relojArduinoBaseMs + SystemClock.elapsedRealtime() - relojObservadoEn)
+            )
+        } else if (conectado && ultimaTelemetriaEn > 0L) getString(R.string.device_telemetry_stale)
+        else getString(R.string.device_no_telemetry)
         valorProximaAlarma.text =
             when {
                 !proximaAlarmaVerificada -> getString(R.string.device_next_alarm_unverified)
@@ -421,7 +473,7 @@ class PastilleroActivity : AppCompatActivity() {
         volviendoDeAjustes = false
         val adaptador = BluetoothAdapter.getDefaultAdapter()
         if (adaptador == null || !adaptador.isEnabled) {
-            mostrarEstado("Desconectado")
+            mostrarEstado(if (adaptador == null) "Este teléfono no tiene Bluetooth." else "Bluetooth está apagado.")
             return
         }
         val pastilleros =
@@ -430,9 +482,10 @@ class PastilleroActivity : AppCompatActivity() {
                     it.name?.contains("HC05", ignoreCase = true) == true
             }
         when (pastilleros.size) {
-            0 -> mostrarEstado("Desconectado")
+            0 -> abrirAjustesBluetooth()
             1 -> {
                 mostrarEstado("Conectando")
+                solicitarNotificaciones()
                 DeviceConnectionService.conectar(this, pastilleros.single().address)
             }
             else ->
@@ -440,6 +493,7 @@ class PastilleroActivity : AppCompatActivity() {
                     .setTitle("Selecciona tu pastillero")
                     .setItems(pastilleros.map { it.name ?: "Pastillero" }.toTypedArray()) { _, indice ->
                         mostrarEstado("Conectando")
+                        solicitarNotificaciones()
                         DeviceConnectionService.conectar(this, pastilleros[indice].address)
                     }
                     .setNegativeButton(R.string.action_cancel, null)

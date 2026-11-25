@@ -16,6 +16,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -36,6 +38,8 @@ class HistorialActivity : AppCompatActivity() {
     private lateinit var listaHistorial: LinearLayout
     private lateinit var botonReintentar: MaterialButton
     private var escuchaHistorial: ValueEventListener? = null
+    private var estadoFiltro = 0
+    private var filasCargadas: List<FilaHistorial> = emptyList()
 
     private val escuchaAutenticacion =
         FirebaseAuth.AuthStateListener { autenticacionActual ->
@@ -60,8 +64,19 @@ class HistorialActivity : AppCompatActivity() {
         listaHistorial = findViewById(R.id.historyList)
         botonReintentar = findViewById(R.id.btnHistoryRetry)
         botonReintentar.setOnClickListener { escucharHistorial() }
+        val estados = findViewById<ChipGroup>(R.id.historyStatusFilters)
+        estados.check(R.id.historyStatusAll)
+        estados.setOnCheckedStateChangeListener { _, ids ->
+            estadoFiltro = when (ids.firstOrNull()) {
+                R.id.historyStatusTaken -> 1
+                R.id.historyStatusMissed -> 2
+                R.id.historyStatusUnconfirmed -> 3
+                else -> 0
+            }
+            mostrarFilasFiltradas()
+        }
         adaptarEncabezadoYResumen()
-        configurarIndicadores(0, 0, 0)
+        configurarIndicadores(0, 0)
     }
 
     override fun onStart() {
@@ -117,7 +132,7 @@ class HistorialActivity : AppCompatActivity() {
         ilustracion.translationY = -resources.getDimension(R.dimen.ui_space_12)
 
         val cuadricula = findViewById<GridLayout>(R.id.historySummaryGrid)
-        cuadricula.columnCount = if (compacto) 1 else 3
+        cuadricula.columnCount = if (compacto) 1 else 2
         for (indice in 0 until cuadricula.childCount) {
             val mosaico = cuadricula.getChildAt(indice) as LinearLayout
             mosaico.background =
@@ -241,30 +256,16 @@ class HistorialActivity : AppCompatActivity() {
                         val filasDeHoy = filas.filter { esHoy(it.programadaEn, it.idZona) }
                         var tomadas = 0
                         var omitidas = 0
-                        var tardias = 0
                         filasDeHoy.forEach { fila ->
                             when (fila.estado) {
-                                DoseOccurrenceTracker.ESTADO_CONFIRMADA -> {
-                                    if ((fila.confirmadaEn ?: fila.programadaEn) > fila.programadaEn)
-                                        tardias++
-                                    else tomadas++
-                                }
+                                DoseOccurrenceTracker.ESTADO_CONFIRMADA -> tomadas++
                                 DoseOccurrenceTracker.ESTADO_NO_TOMADA,
                                 DoseOccurrenceTracker.ESTADO_SIN_CONFIRMAR -> omitidas++
                             }
                         }
-                        configurarIndicadores(tomadas, omitidas, tardias)
-                        listaHistorial.removeAllViews()
-                        estadoVista.visibility = View.VISIBLE
-                        if (filas.isEmpty()) {
-                            estadoVista.setText(R.string.history_empty)
-                            estadoVista.gravity = Gravity.CENTER
-                        } else {
-                            estadoVista.visibility = View.GONE
-                        }
-                        crearGruposPorFecha(filas).forEach { grupo ->
-                            listaHistorial.addView(crearGrupo(grupo))
-                        }
+                        configurarIndicadores(tomadas, omitidas)
+                        filasCargadas = filas
+                        mostrarFilasFiltradas()
                     }
 
                     override fun onCancelled(errorBaseDatos: DatabaseError) {
@@ -279,10 +280,25 @@ class HistorialActivity : AppCompatActivity() {
                 .also { referenciaHistorial.addValueEventListener(it) }
     }
 
-    private fun configurarIndicadores(tomadas: Int, omitidas: Int, tardias: Int) {
+    private fun mostrarFilasFiltradas() {
+        val visibles = filasCargadas.filter { fila ->
+            val estadoCoincide = when (estadoFiltro) {
+                1 -> fila.estado == DoseOccurrenceTracker.ESTADO_CONFIRMADA
+                2 -> fila.estado == DoseOccurrenceTracker.ESTADO_NO_TOMADA
+                3 -> fila.estado == DoseOccurrenceTracker.ESTADO_SIN_CONFIRMAR
+                else -> true
+            }
+            estadoCoincide
+        }
+        listaHistorial.removeAllViews()
+        estadoVista.visibility = if (visibles.isEmpty()) View.VISIBLE else View.GONE
+        if (visibles.isEmpty()) estadoVista.text = if (estadoFiltro != 0) "No hay tomas para estos filtros." else getString(R.string.history_empty)
+        crearGruposPorFecha(visibles).forEach { listaHistorial.addView(crearGrupo(it)) }
+    }
+
+    private fun configurarIndicadores(tomadas: Int, omitidas: Int) {
         configurarIndicador(R.id.historyTakenKpi, R.string.history_taken, tomadas)
         configurarIndicador(R.id.historyMissedKpi, R.string.history_missed, omitidas)
-        configurarIndicador(R.id.historyLateKpi, R.string.history_late, tardias)
     }
 
     private fun configurarIndicador(idMosaico: Int, idTitulo: Int, valor: Int) {
@@ -502,7 +518,7 @@ class HistorialActivity : AppCompatActivity() {
                         setTextColor(
                             ContextCompat.getColor(
                                 this@HistorialActivity,
-                                R.color.history_blue_strong,
+                                R.color.white,
                             )
                         )
                         setStrokeColor(
@@ -513,6 +529,7 @@ class HistorialActivity : AppCompatActivity() {
                                 )
                             )
                         )
+                        backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this@HistorialActivity, R.color.history_blue_strong))
                         minHeight = 48.enDp()
                         elevation = 0f
                         setOnClickListener {
@@ -547,7 +564,67 @@ class HistorialActivity : AppCompatActivity() {
                     }
             )
         }
+        if (fila.estado == DoseOccurrenceTracker.ESTADO_SIN_CONFIRMAR) {
+            tarjeta.isClickable = true
+            tarjeta.isFocusable = true
+            tarjeta.contentDescription = "Confirmar toma de ${fila.medicamento}"
+            tarjeta.setOnClickListener { mostrarRespuestaSinConfirmar(fila) }
+        }
         return tarjeta
+    }
+
+    private fun mostrarRespuestaSinConfirmar(fila: FilaHistorial) {
+        val clave = fila.instantanea?.key ?: return
+        val dialogo = android.app.Dialog(this)
+        dialogo.setContentView(R.layout.dialog_history_answer)
+        dialogo.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialogo.findViewById<TextView>(R.id.historyAnswerDetails).text =
+            "${fila.medicamento}${if (fila.dosis.isBlank()) "" else " · ${fila.dosis}"}\n${AlarmTimeFormatter.formatear(fila.programadaEn, TimeZone.getTimeZone(fila.idZona))}"
+        val tomada = dialogo.findViewById<MaterialButton>(R.id.historyAnswerTaken)
+        val noTomada = dialogo.findViewById<MaterialButton>(R.id.historyAnswerMissed)
+        dialogo.findViewById<View>(R.id.historyAnswerCancel).setOnClickListener { dialogo.dismiss() }
+        fun responder(esTomada: Boolean) {
+            tomada.isEnabled = false
+            noTomada.isEnabled = false
+            referenciaHistorial.child(clave).runTransaction(object : com.google.firebase.database.Transaction.Handler {
+                override fun doTransaction(datos: com.google.firebase.database.MutableData): com.google.firebase.database.Transaction.Result {
+                    if (datos.child("estado").value != DoseOccurrenceTracker.ESTADO_SIN_CONFIRMAR)
+                        return com.google.firebase.database.Transaction.abort()
+                    datos.child("estado").value = if (esTomada) DoseOccurrenceTracker.ESTADO_CONFIRMADA else DoseOccurrenceTracker.ESTADO_NO_TOMADA
+                    datos.child("respuestaEn").value = ServerValue.TIMESTAMP
+                    datos.child("confirmadoEn").value = if (esTomada) ServerValue.TIMESTAMP else 0L
+                    return com.google.firebase.database.Transaction.success(datos)
+                }
+                override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
+                    if (isFinishing || isDestroyed) return
+                    if (error == null && committed) {
+                        val preferencias = getSharedPreferences("pending_intake", MODE_PRIVATE)
+                        val restantes = preferencias.getStringSet("keys", emptySet()).orEmpty().toMutableSet().apply { remove(clave) }
+                        val grupo = preferencias.getString("group_for_$clave", null)
+                        val editor = preferencias.edit().putStringSet("keys", restantes).remove("medicine_$clave").remove("dose_$clave").remove("group_for_$clave")
+                        if (grupo != null) {
+                            val pendientesGrupo = preferencias.getStringSet("group_$grupo", emptySet()).orEmpty().toMutableSet().apply { remove(clave) }
+                            if (pendientesGrupo.isEmpty()) {
+                                editor.remove("group_$grupo").remove("group_title_$grupo")
+                                editor.putStringSet("groups", preferencias.getStringSet("groups", emptySet()).orEmpty().toMutableSet().apply { remove(grupo) })
+                                (getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager).cancel(grupo.hashCode())
+                            } else editor.putStringSet("group_$grupo", pendientesGrupo)
+                        }
+                        editor.apply()
+                        (getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager).cancel(clave.hashCode())
+                        dialogo.dismiss()
+                    } else {
+                        tomada.isEnabled = true
+                        noTomada.isEnabled = true
+                        android.widget.Toast.makeText(this@HistorialActivity, if (error != null) "No se pudo guardar. Inténtalo de nuevo." else "Esta toma ya fue respondida.", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }, false)
+        }
+        tomada.setOnClickListener { responder(true) }
+        noTomada.setOnClickListener { responder(false) }
+        dialogo.show()
+        dialogo.window?.setLayout(minOf(resources.displayMetrics.widthPixels - 32.enDp(), 400.enDp()), ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
     private fun crearIndicadorEstado(texto: String, color: Int, idFondo: Int) =
@@ -565,25 +642,13 @@ class HistorialActivity : AppCompatActivity() {
     private fun presentacionEstado(fila: FilaHistorial): Triple<String, Int, Int> =
         when (fila.estado) {
             DoseOccurrenceTracker.ESTADO_CONFIRMADA -> {
-                val tardia = (fila.confirmadaEn ?: fila.programadaEn) > fila.programadaEn
-                if (tardia)
-                    Triple(
-                        getString(R.string.history_taken_late),
-                        R.color.feature_orange,
-                        R.drawable.bg_history_status_late,
-                    )
-                else
-                    Triple(
-                        getString(R.string.history_taken_on_time),
-                        R.color.feature_green,
-                        R.drawable.bg_history_status_taken,
-                    )
+                Triple(getString(R.string.history_taken_on_time), R.color.feature_green, R.drawable.bg_history_status_taken)
             }
             DoseOccurrenceTracker.ESTADO_NO_TOMADA ->
                 Triple(
                     getString(R.string.history_omitted),
-                    R.color.error_red,
-                    R.drawable.bg_history_status_missed,
+                    R.color.history_omitted_text,
+                    R.drawable.bg_history_status_omitted,
                 )
             DoseOccurrenceTracker.ESTADO_SIN_CONFIRMAR ->
                 Triple(

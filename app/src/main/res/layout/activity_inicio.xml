@@ -21,7 +21,7 @@
           <include layout="@layout/view_feature_tile" android:id="@+id/btnPastillero" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_columnWeight="1" android:layout_marginStart="6dp" android:layout_marginTop="6dp"/>
         </GridLayout>
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp" android:background="@drawable/bg_next_alarm" android:orientation="vertical" android:padding="@dimen/ui_container_padding">
-          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+          <LinearLayout android:id="@+id/alarmHeader" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
             <ImageView style="@style/FunctionalIcon" android:src="@drawable/ic_schedule" app:tint="@color/brand_primary"/>
             <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:layout_weight="1" android:text="@string/section_next_alarm" android:textColor="@color/text_primary" android:textAppearance="@style/MedAlarmTextSectionTitle" android:textStyle="bold"/>
             <TextView android:id="@+id/tvAlarmDay" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/bg_chip" android:paddingHorizontal="@dimen/ui_chip_padding_horizontal" android:paddingVertical="@dimen/ui_chip_padding_vertical" android:textColor="@color/brand_primary" android:textAppearance="@style/MedAlarmTextSecondaryStrong" android:visibility="gone"/>
@@ -39,7 +39,6 @@
           </LinearLayout>
           <TextView android:id="@+id/tvAlarmState" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/alarm_loading" android:textColor="@color/text_secondary" android:textAppearance="@style/MedAlarmTextSecondary"/>
         </LinearLayout>
-        <com.google.android.material.button.MaterialButton android:id="@+id/btnNuevaAlarma" style="@style/PrimaryActionButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minHeight="52dp" android:layout_gravity="center_horizontal" android:layout_marginTop="20dp" android:text="@string/action_new_alarm" app:icon="@drawable/ic_add" app:iconGravity="textStart" app:iconTint="@color/white"/>
       </com.example.recordatoriomedicamentos.AdaptiveContentLayout>
     </com.example.recordatoriomedicamentos.MedAlarmRoot>
   </ScrollView>

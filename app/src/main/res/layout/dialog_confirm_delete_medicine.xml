@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_logout_dialog"
+    android:orientation="vertical"
+    android:padding="24dp">
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/medicine_delete_confirmation_title"
+        android:textAppearance="@style/MedAlarmTextSectionTitle"
+        android:textColor="@color/text_primary" />
+    <TextView
+        android:id="@+id/deleteMedicineMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:textAppearance="@style/MedAlarmTextBodyStrong"
+        android:textColor="@color/text_primary" />
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/medicine_delete_confirmation_message"
+        android:textAppearance="@style/MedAlarmTextBody"
+        android:textColor="@color/text_secondary" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:gravity="end"
+        android:orientation="horizontal">
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDeleteMedicineCancel"
+            style="@style/SecondaryOutlineButton"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="@string/action_cancel" />
+        <Space android:layout_width="8dp" android:layout_height="1dp" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDeleteMedicineConfirm"
+            style="@style/DestructiveActionButton"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="@string/action_delete" />
+    </LinearLayout>
+</LinearLayout>
