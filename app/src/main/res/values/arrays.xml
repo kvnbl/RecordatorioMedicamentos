@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string-array name="weekday_names">
+    <item>Lunes</item>
+    <item>Martes</item>
+    <item>Miércoles</item>
+    <item>Jueves</item>
+    <item>Viernes</item>
+    <item>Sábado</item>
+    <item>Domingo</item>
+  </string-array>
+  <string-array name="weekday_summary_names">
+    <item>lun</item>
+    <item>mar</item>
+    <item>mie</item>
+    <item>jue</item>
+    <item>vie</item>
+    <item>sab</item>
+    <item>dom</item>
+  </string-array>
+</resources>

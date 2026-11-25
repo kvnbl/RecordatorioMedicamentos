@@ -1,13 +1,14 @@
 {
   "project_info": {
-    "project_number": "451577536664",
-    "project_id": "recordatoriodemedicament-90e4f",
-    "storage_bucket": "recordatoriodemedicament-90e4f.firebasestorage.app"
+    "project_number": "1094314662036",
+    "firebase_url": "https://recordatoriomedicamentoseva3-default-rtdb.firebaseio.com",
+    "project_id": "recordatoriomedicamentoseva3",
+    "storage_bucket": "recordatoriomedicamentoseva3.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:451577536664:android:2f1818888076b3527ab0ed",
+        "mobilesdk_app_id": "1:1094314662036:android:121019212602bf97bffc81",
         "android_client_info": {
           "package_name": "com.example.recordatoriomedicamentos"
         }
@@ -15,7 +16,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBje40MWTQNJVNnhhvVV5ddd9_LkX9WK7o"
+          "current_key": "AIzaSyAstXztmQ8Y-vyrBzYNNjE9NMkiFnRzGvg"
         }
       ],
       "services": {

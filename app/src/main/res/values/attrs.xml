@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <declare-styleable name="MedAlarmRoot">
+    <attr name="dashboardWaveOffset" format="dimension"/>
+    <attr name="dashboardWaveTopOffset" format="dimension"/>
+    <attr name="waveHeaderHeight" format="dimension"/>
+    <attr name="waveStrongStartColor" format="color"/>
+    <attr name="waveStrongEndColor" format="color"/>
+    <attr name="waveLightColor" format="color"/>
+  </declare-styleable>
+</resources>
